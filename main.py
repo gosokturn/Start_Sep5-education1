@@ -1,9 +1,20 @@
+import streamlit as st
+import streamlit.components.v1 as components
+
+# 페이지 기본 설정
+st.set_page_config(
+    page_title="실시간 극장가 대시보드",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# 전체 HTML/CSS/JS 코드 구성
+html_code = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>극장가 실시간 대시보드</title>
   <style>
     /* 글로벌 테마 및 리셋 */
     * {
@@ -14,10 +25,10 @@
     }
 
     body {
-      background-color: #0f172a; /* 신비로운 다크 네이비 배경 */
+      background-color: #0f172a;
       color: #f8fafc;
       min-height: 100vh;
-      padding: 24px 16px;
+      padding: 16px;
     }
 
     .dashboard-container {
@@ -25,15 +36,15 @@
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 16px;
     }
 
-    /* 1. 최상단 헤더 박스 (기존 크기 유지) */
+    /* 1. 최상단 헤더 박스 */
     .top-header {
       background: linear-gradient(135deg, #1e293b, #334155);
       border: 1px solid #475569;
       border-radius: 16px;
-      padding: 24px;
+      padding: 20px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -41,7 +52,7 @@
     }
 
     .top-header h1 {
-      font-size: 1.5rem;
+      font-size: 1.4rem;
       font-weight: 700;
       color: #38bdf8;
       letter-spacing: -0.5px;
@@ -56,10 +67,10 @@
       border: 1px solid rgba(56, 189, 248, 0.3);
     }
 
-    /* 2. 실시간 극장가 하이라이트 (KPI Overview) - 크기 조율 적용 */
+    /* 2. 실시간 극장가 하이라이트 (KPI Overview) */
     .kpi-overview-section {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 12px;
     }
 
@@ -84,16 +95,16 @@
     }
 
     .kpi-value {
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       font-weight: 700;
       color: #f1f5f9;
     }
 
     .kpi-value .highlight {
-      color: #f43f5e; /* 포인트 레드 컬러 */
+      color: #f43f5e;
     }
 
-    /* 3. 영화 검색창 - 컴팩트 사이즈 조정 */
+    /* 3. 영화 검색창 */
     .search-section {
       width: 100%;
     }
@@ -114,12 +125,11 @@
       color: #fff;
       font-size: 0.95rem;
       outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      transition: border-color 0.2s;
     }
 
     .search-input:focus {
       border-color: #38bdf8;
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
     }
 
     .search-btn {
@@ -169,7 +179,7 @@
 
     .poster-placeholder {
       width: 100%;
-      height: 220px;
+      height: 200px;
       background-color: #334155;
       display: flex;
       align-items: center;
@@ -199,7 +209,7 @@
       justify-content: space-between;
     }
 
-    /* 상세 정보 모달 (팝업) */
+    /* 상세 정보 모달 */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -219,11 +229,10 @@
       background-color: #1e293b;
       border: 1px solid #475569;
       border-radius: 16px;
-      max-width: 500px;
+      max-width: 480px;
       width: 100%;
       padding: 24px;
       position: relative;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
     }
 
     .close-btn {
@@ -235,10 +244,6 @@
       color: #94a3b8;
       font-size: 1.2rem;
       cursor: pointer;
-    }
-
-    .modal-header {
-      margin-bottom: 16px;
     }
 
     .modal-title {
@@ -256,7 +261,7 @@
       font-size: 0.9rem;
       line-height: 1.6;
       color: #cbd5e1;
-      margin-bottom: 12px;
+      margin: 12px 0;
     }
 
     .modal-stats {
@@ -281,7 +286,6 @@
 <body>
 
   <div class="dashboard-container">
-    <!-- 1. 맨 위 박스 (기존 크기 유지) -->
     <header class="top-header">
       <div>
         <h1>CINE-INSIGHT</h1>
@@ -290,7 +294,6 @@
       <span class="status-tag">Live System</span>
     </header>
 
-    <!-- 2. 실시간 극장가 하이라이트 (KPI Overview) - 위치 변경 및 크기 조율 -->
     <section class="kpi-overview-section">
       <div class="kpi-card">
         <span class="kpi-label">실시간 예매율 1위</span>
@@ -310,7 +313,6 @@
       </div>
     </section>
 
-    <!-- 3. 영화 검색창 - 위치 변경 및 슬림화 -->
     <section class="search-section">
       <div class="search-bar-wrapper">
         <input type="text" placeholder="영화 제목, 감독, 배우를 검색하세요..." class="search-input" />
@@ -318,64 +320,44 @@
       </div>
     </section>
 
-    <!-- 4. 하단 영화 목록 영역 -->
     <section class="content-section">
       <h2 class="section-title">현재 상영작 (클릭 시 상세정보)</h2>
       <div class="movie-grid">
-        
-        <!-- 영화 카드 1 -->
         <div class="movie-card" onclick="openModal('파묘', '미스터리 / 공포', '9.2', '812만명', '기이한 병이 대대로 물려려오는 집안의 부탁을 받은 무당 화림과 봉길은 조상의 묫자리가 화근임을 알아채고 이장을 권한다.')">
           <div class="poster-placeholder">POSTER</div>
           <div class="movie-info">
             <div class="movie-title">파묘</div>
-            <div class="movie-meta">
-              <span>★ 9.2</span>
-              <span>예매율 38.4%</span>
-            </div>
+            <div class="movie-meta"><span>★ 9.2</span><span>예매율 38.4%</span></div>
           </div>
         </div>
 
-        <!-- 영화 카드 2 -->
         <div class="movie-card" onclick="openModal('듄: 파트2', 'SF / 액션', '9.0', '195만명', '황제의 음모로 멸문한 가문의 유일한 후계자 폴은 어머니와 함께 사막으로 도망쳐 아라키스의 프레멘들과 함께 복수를 준비한다.')">
           <div class="poster-placeholder">POSTER</div>
           <div class="movie-info">
             <div class="movie-title">듄: 파트2</div>
-            <div class="movie-meta">
-              <span>★ 9.0</span>
-              <span>예매율 24.1%</span>
-            </div>
+            <div class="movie-meta"><span>★ 9.0</span><span>예매율 24.1%</span></div>
           </div>
         </div>
 
-        <!-- 영화 카드 3 -->
         <div class="movie-card" onclick="openModal('윙카', '판타지 / 뮤지컬', '8.6', '340만명', '세계 최고의 Chocolatier가 되기 위해 모험을 떠나는 젊은 시절 위리 웡카의 판타지한 여정.')">
           <div class="poster-placeholder">POSTER</div>
           <div class="movie-info">
             <div class="movie-title">윙카</div>
-            <div class="movie-meta">
-              <span>★ 8.6</span>
-              <span>예매율 12.5%</span>
-            </div>
+            <div class="movie-meta"><span>★ 8.6</span><span>예매율 12.5%</span></div>
           </div>
         </div>
 
-        <!-- 영화 카드 4 -->
         <div class="movie-card" onclick="openModal('시민덕희', '드라마 / 범죄', '8.4', '170만명', '보이스피싱을 당한 평범한 시민 덕희에게 사기 친 조직원이 직접 제보를 해오며 벌어지는 통쾌한 추적극.')">
           <div class="poster-placeholder">POSTER</div>
           <div class="movie-info">
             <div class="movie-title">시민덕희</div>
-            <div class="movie-meta">
-              <span>★ 8.4</span>
-              <span>예매율 5.2%</span>
-            </div>
+            <div class="movie-meta"><span>★ 8.4</span><span>예매율 5.2%</span></div>
           </div>
         </div>
-
       </div>
     </section>
   </div>
 
-  <!-- 영화 정보 팝업 모달 -->
   <div class="modal-overlay" id="movieModal" onclick="closeModalOutside(event)">
     <div class="modal-content">
       <button class="close-btn" onclick="closeModal()">&times;</button>
@@ -386,37 +368,27 @@
       <div class="modal-body">
         <p id="modalDesc">영화 줄거리 설명이 이곳에 표시됩니다.</p>
         <div class="modal-stats">
-          <div>
-            <span>관람객 평점</span>
-            <strong id="modalRating">0.0</strong>
-          </div>
-          <div>
-            <span>누적 관객수</span>
-            <strong id="modalAudience">0명</strong>
-          </div>
+          <div><span>관람객 평점</span><strong id="modalRating">0.0</strong></div>
+          <div><span>누적 관객수</span><strong id="modalAudience">0명</strong></div>
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    // 모달 열기 함수
     function openModal(title, genre, rating, audience, desc) {
       document.getElementById('modalTitle').innerText = title;
       document.getElementById('modalGenre').innerText = genre;
       document.getElementById('modalRating').innerText = `★ ${rating}`;
       document.getElementById('modalAudience').innerText = audience;
       document.getElementById('modalDesc').innerText = desc;
-      
       document.getElementById('movieModal').style.display = 'flex';
     }
 
-    // 모달 닫기 함수
     function closeModal() {
       document.getElementById('movieModal').style.display = 'none';
     }
 
-    // 배경 클릭 시 모달 닫기
     function closeModalOutside(event) {
       if (event.target.id === 'movieModal') {
         closeModal();
@@ -425,3 +397,7 @@
   </script>
 </body>
 </html>
+"""
+
+# Streamlit 화면에 HTML 렌더링
+components.html(html_code, height=900, scrolling=True)
