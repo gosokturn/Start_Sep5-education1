@@ -1,256 +1,219 @@
-import streamlit as st
+import datetime
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-import numpy as np
+import requests
+import streamlit as st
+import pytz
 
-# 1. 페이지 기본 설정 (단 한 번만 실행)
+# 1. 페이지 기본 설정 (제목, 레이아웃)
 st.set_page_config(
-    page_title="서울 기온 데이터 종합 분석 Dashboard",
-    page_icon="🌡️",
+    page_title="어제의 박스오피스",
+    page_icon="🎬",
     layout="wide"
 )
 
-# 2. 데이터 로드 및 전처리 함수 (캐싱 적용)
-@st.cache_data
-def load_data():
-    url = "https://raw.githubusercontent.com/greatsong/modudata/main/data/seoul.csv"
+
+# 2. API 호출 함수 (결과를 1시간 동안 캐싱)
+# Streamlit Cloud 서버 시계와 무관하게 한국 시간(Asia/Seoul) 기준으로 '어제' 날짜를 구합니다.
+@st.cache_data(ttl=3600)
+def fetch_daily_box_office(api_key: str, target_date_str: str):
+    """
+    KOBIS API를 호출하여 해당 날짜의 일별 박스오피스 데이터를 가져오는 함수입니다.
+    ttl=3600 설정을 통해 같은 날짜에 대한 요청은 1시간(3600초) 동안 API를 재요청하지 않고 캐시 데이터를 사용합니다.
+    """
+    url = "https://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json"
+    params = {
+        "key": api_key,
+        "targetDt": target_date_str
+    }
     
-    # 인코딩 예외 처리
     try:
-        df = pd.read_csv(url, encoding="cp949")
-    except Exception:
-        try:
-            df = pd.read_csv(url, encoding="euc-kr")
-        except Exception:
-            df = pd.read_csv(url, encoding="utf-8")
+        response = requests.get(url, params=params, timeout=10)
+        
+        # HTTP 통신 에러 확인 (200 OK가 아닌 경우)
+        if response.status_code != 200:
+            return None, f"서버 통신 오류가 발생했습니다. (HTTP 상태 코드: {response.status_code})"
             
-    # 컬럼명 공백 제거 및 대표 매핑
-    df.columns = df.columns.str.strip()
-    
-    col_map = {}
-    for col in df.columns:
-        if "날짜" in col:
-            col_map[col] = "날짜"
-        elif "지점" in col:
-            col_map[col] = "지점"
-        elif "평균" in col:
-            col_map[col] = "평균기온"
-        elif "최저" in col:
-            col_map[col] = "최저기온"
-        elif "최고" in col:
-            col_map[col] = "최고기온"
+        data = response.json()
+        
+        # KOBIS API 특성: 인증키가 틀려도 200 OK가 오며, 대신 'faultInfo' 객체가 반환됨
+        if "faultInfo" in data:
+            message = data["faultInfo"].get("message", "알 수 없는 오류가 발생했습니다.")
+            return None, f"KOBIS API 오류: {message}"
             
-    df = df.rename(columns=col_map)
-    
-    # 날짜 및 수치형 데이터 변환
-    df["날짜"] = pd.to_datetime(df["날짜"], errors="coerce")
-    df = df.dropna(subset=["날짜"])
-    
-    for temp_col in ["평균기온", "최저기온", "최고기온"]:
-        if temp_col in df.columns:
-            df[temp_col] = pd.to_numeric(df[temp_col], errors="coerce")
+        # 정상적인 박스오피스 결과가 없는 경우
+        box_office_result = data.get("boxOfficeResult", {})
+        daily_list = box_office_result.get("dailyBoxOfficeList", [])
+        
+        if not daily_list:
+            return None, "조회된 영화 목록이 없습니다. 해당 날짜의 데이터 집계가 아직 완료되지 않았을 수 있습니다."
             
-    # 파생 변수 생성
-    df["연도"] = df["날짜"].dt.year
-    df["월"] = df["날짜"].dt.month
-    df["일교차"] = df["최고기온"] - df["최저기온"]
-    df["계절"] = df["월"].map({
-        12: "겨울", 1: "겨울", 2: "겨울",
-        3: "봄", 4: "봄", 5: "봄",
-        6: "여름", 7: "여름", 8: "여름",
-        9: "가을", 10: "가을", 11: "가을"
-    })
-    
-    return df
+        return daily_list, None
 
-# 데이터 로딩
-try:
-    df = load_data()
-    data_loaded = True
-except Exception as e:
-    data_loaded = False
-    st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
+    except requests.exceptions.RequestException as e:
+        return None, f"네트워크 요청 중 오류가 발생했습니다: {str(e)}"
 
-if data_loaded:
-    # 3. 사이드바 - 공통 분석 조건 설정
-    st.sidebar.header("⚙️ 분석 조건 설정")
-    
-    min_year = int(df["연도"].min())
-    max_year = int(df["연도"].max())
-    
-    # 고유 key 값을 부여하여 Element ID 충돌 방지
-    year_range = st.sidebar.slider(
-        "조회 연도 범위 선택",
-        min_value=min_year,
-        max_value=max_year,
-        value=(min_year, max_year),
-        key="main_year_range_slider"
-    )
-    
-    selected_seasons = st.sidebar.multiselect(
-        "계절 선택 (분포 및 상관관계 분석용)",
-        options=["봄", "여름", "가을", "겨울"],
-        default=["봄", "여름", "가을", "겨울"],
-        key="main_season_multiselect"
-    )
 
-    # 기본 필터링 데이터
-    filtered_df = df[
-        (df["연도"] >= year_range[0]) & 
-        (df["연도"] <= year_range[1]) &
-        (df["계절"].isin(selected_seasons))
-    ]
+# 3. 메인 앱 로직
+def main():
+    st.title("🎬 어제의 박스오피스 순위")
+    
+    # -------------------------------------------------------------
+    # [설정 1] Secrets에서 API Key 가져오기
+    # -------------------------------------------------------------
+    if "KOBIS_KEY" not in st.secrets:
+        st.error("🔑 API 인증키가 설정되지 않았습니다.")
+        st.info("""
+        **확인해 주세요:**
+        1. Streamlit Cloud의 앱 설정에서 **Secrets** 메뉴를 엽니다.
+        2. `KOBIS_KEY = "발급받은_인증키"` 형식으로 키를 등록했는지 확인해 주세요.
+        """)
+        return
 
-    st.title("🌡️ 서울 100년 기온 데이터 종합 분석")
+    api_key = st.secrets["KOBIS_KEY"]
+
+    # -------------------------------------------------------------
+    # [설정 2] 한국 시간(KST) 기준 '어제' 날짜 계산하기
+    # -------------------------------------------------------------
+    kst = pytz.timezone("Asia/Seoul")
+    today_kst = datetime.datetime.now(kst).date()
+    yesterday_kst = today_kst - datetime.timedelta(days=1)
+    
+    # API 요청 형식 (YYYYMMDD) 및 화면 표시 형식 (YYYY년 MM월 DD일)
+    target_dt_str = yesterday_kst.strftime("%Y%m%d")
+    display_date_str = yesterday_kst.strftime("%Y년 %m월 %d일")
+    
+    st.caption(f"📅 기준일: {display_date_str} (한국 시간 기준 어제)")
+
+    # -------------------------------------------------------------
+    # [설정 3] API 데이터 불러오기 및 에러 처리
+    # -------------------------------------------------------------
+    with st.spinner("박스오피스 데이터를 불러오는 중입니다..."):
+        raw_data, error_message = fetch_daily_box_office(api_key, target_dt_str)
+
+    # 에러가 발생했거나 데이터가 없는 경우 안내 메시지 출력
+    if error_message:
+        st.error(f"⚠️ 데이터를 불러올 수 없습니다.")
+        st.warning(f"**상세 원인:** {error_message}")
+        st.info("""
+        **확인 사항:**
+        - `secrets.toml` 또는 Streamlit Secrets에 입력한 `KOBIS_KEY` 값이 정확한지 확인해 주세요.
+        - KOBIS 개발자 센터에서 키가 정상적으로 활성화되었는지 확인해 주세요.
+        - 일시적인 KOBIS 서버 점검 또는 네트워크 문제일 수 있으니 잠시 후 다시 시도해 주세요.
+        """)
+        return
+
+    # -------------------------------------------------------------
+    # [설정 4] 데이터 전처리 (문자열 -> 숫자 변환)
+    # -------------------------------------------------------------
+    df = pd.DataFrame(raw_data)
+
+    # API 응답 결과가 전부 문자열로 넘어오므로 필요한 컬럼을 숫자형으로 변환합니다.
+    numeric_columns = ["rank", "audiCnt", "audiAcc", "scrnCnt", "rankInten"]
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+    # 순위 기준으로 정렬
+    df = df.sort_values(by="rank", ascending=True)
+
+    # -------------------------------------------------------------
+    # [시각화 1] 1위 영화 핵심 지표 카드 (Metrics)
+    # -------------------------------------------------------------
+    top_movie = df.iloc[0]
+    
+    st.subheader(f"🥇 1위 영화: {top_movie['movieNm']}")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # 전날 대비 순위 증감 레이블 생성
+    rank_inten = int(top_movie["rankInten"])
+    if rank_inten > 0:
+        delta_str = f"▲ {rank_inten}"
+    elif rank_inten < 0:
+        delta_str = f"▼ {abs(rank_inten)}"
+    else:
+        delta_str = "변동 없음"
+
+    with col1:
+        st.metric(
+            label="어제 관객수",
+            value=f"{int(top_movie['audiCnt']):,} 명",
+            delta=delta_str
+        )
+        
+    with col2:
+        st.metric(
+            label="누적 관객수",
+            value=f"{int(top_movie['audiAcc']):,} 명"
+        )
+        
+    with col3:
+        st.metric(
+            label="스크린수",
+            value=f"{int(top_movie['scrnCnt']):,} 개"
+        )
+
     st.markdown("---")
 
-    # 4. 탭 구성 (기능별 분리)
-    tab1, tab2, tab3 = st.tabs([
-        "📈 연평균 기온 변화 추이", 
-        "📊 일별 평균기온 분포 (히스토그램)", 
-        "📉 최저 vs 최고기온 상관관계"
-    ])
+    # -------------------------------------------------------------
+    # [시각화 2] 관객수 상위 5편 막대그래프 (Plotly)
+    # -------------------------------------------------------------
+    st.subheader("📊 관객수 상위 5개 영화")
+    
+    # 상위 5개 데이터 추출
+    top5_df = df.head(5).copy()
+    
+    # 막대그래프 생성 (순위 순서대로 보이도록 categoryarray 설정)
+    fig = px.bar(
+        top5_df,
+        x="movieNm",
+        y="audiCnt",
+        text="audiCnt",
+        labels={"movieNm": "영화명", "audiCnt": "어제 관객수(명)"},
+        color="audiCnt",
+        color_continuous_scale="Blues"
+    )
+    
+    # 그래프 스타일 조정 (수치 표시 포맷 및 레이아웃)
+    fig.update_traces(texttemplate='%{text:,}명', textposition='outside')
+    fig.update_layout(
+        xaxis_title="",
+        yaxis_title="관객수",
+        showlegend=False,
+        height=400,
+        margin=dict(l=20, r=20, t=30, b=20)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 
-    # ==========================================
-    # TAB 1: 연평균 기온 변화 추이
-    # ==========================================
-    with tab1:
-        st.header("📈 연평균 기온 변화 추이")
-        
-        # 연도별 집계
-        yearly_df = df[(df["연도"] >= year_range[0]) & (df["연도"] <= year_range[1])].groupby("연도").agg({
-            "평균기온": "mean",
-            "최저기온": "mean",
-            "최고기온": "mean"
-        }).reset_index()
+    st.markdown("---")
 
-        valid_years = df.groupby("연도")["평균기온"].count()
-        valid_years = valid_years[valid_years >= 300].index
-        yearly_df = yearly_df[yearly_df["연도"].isin(valid_years)].copy()
-        
-        yearly_df["10년_이동평균"] = yearly_df["평균기온"].rolling(window=10, min_periods=1).mean()
+    # -------------------------------------------------------------
+    # [시각화 3] 전체 박스오피스 표 (Table)
+    # -------------------------------------------------------------
+    st.subheader("📋 전체 순위표")
 
-        col1_1, col1_2 = st.columns(2)
-        with col1_1:
-            show_moving_avg = st.checkbox("10년 이동평균선 표시", value=True, key="tab1_moving_avg")
-        with col1_2:
-            show_trendline = st.checkbox("장기 추세선(Trendline) 표시", value=True, key="tab1_trendline")
+    # 표에 보여줄 컬럼선택 및 이름 변경
+    display_df = df[[
+        "rank", "movieNm", "openDt", "audiCnt", "audiAcc", "scrnCnt"
+    ]].copy()
 
-        if len(yearly_df) > 0:
-            c1, c2, c3, c4 = st.columns(4)
-            avg_temp_all = yearly_df["평균기온"].mean()
-            warmest_row = yearly_df.loc[yearly_df["평균기온"].idxmax()]
-            coolest_row = yearly_df.loc[yearly_df["평균기온"].idxmin()]
-            
-            temp_diff = (yearly_df["평균기온"].iloc[-5:].mean() - yearly_df["평균기온"].iloc[:5].mean()) if len(yearly_df) >= 5 else 0.0
+    display_df.columns = ["순위", "영화명", "개봉일", "어제 관객수", "누적 관객수", "스크린수"]
 
-            c1.metric("선택 기간 평균 기온", f"{avg_temp_all:.1f} ℃")
-            c2.metric("가장 따뜻했던 해", f"{int(warmest_row['연도'])}년", f"{warmest_row['평균기온']:.1f} ℃")
-            c3.metric("가장 추웠던 해", f"{int(coolest_row['연도'])}년", f"{coolest_row['평균기온']:.1f} ℃")
-            c4.metric("기간 내 온난화 경향", f"{temp_diff:+.1f} ℃")
+    # Streamlit 데이터프레임으로 출력 (숫자 세세한 포맷팅 적용)
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "순위": st.column_config.NumberColumn(format="%d"),
+            "어제 관객수": st.column_config.NumberColumn(format="%d 명"),
+            "누적 관객수": st.column_config.NumberColumn(format="%d 명"),
+            "스크린수": st.column_config.NumberColumn(format="%d 개"),
+        }
+    )
 
-            fig1 = go.Figure()
-            fig1.add_trace(go.Scatter(
-                x=yearly_df["연도"], y=yearly_df["평균기온"],
-                mode="lines+markers", name="연평균 기온",
-                line=dict(color="#E63946", width=2), marker=dict(size=5)
-            ))
 
-            if show_moving_avg:
-                fig1.add_trace(go.Scatter(
-                    x=yearly_df["연도"], y=yearly_df["10년_이동평균"],
-                    mode="lines", name="10년 이동평균",
-                    line=dict(color="#1D3557", width=3, dash="dash")
-                ))
-
-            if show_trendline and len(yearly_df) > 1:
-                x_vals = yearly_df["연도"].values
-                y_vals = yearly_df["평균기온"].values
-                slope, intercept = np.polyfit(x_vals, y_vals, 1)
-                trend_y = slope * x_vals + intercept
-                fig1.add_trace(go.Scatter(
-                    x=yearly_df["연도"], y=trend_y,
-                    mode="lines", name="장기 추세선",
-                    line=dict(color="#2A9D8F", width=2, dash="dot")
-                ))
-
-            fig1.update_layout(
-                xaxis_title="연도", yaxis_title="기온 (℃)",
-                template="plotly_white", hovermode="x unified", height=500
-            )
-            st.plotly_chart(fig1, use_container_width=True)
-
-    # ==========================================
-    # TAB 2: 일별 평균기온 분포 (히스토그램)
-    # ==========================================
-    with tab2:
-        st.header("📊 일별 평균기온 분포 (히스토그램)")
-        
-        bin_size = st.slider("기온 구간 너비 (℃)", min_value=1, max_value=5, value=2, step=1, key="tab2_bin_size")
-
-        total_days = len(filtered_df)
-        if total_days > 0:
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("분석 대상 총 일수", f"{total_days:,} 일")
-            c2.metric("기간 평균기온", f"{filtered_df['평균기온'].mean():.1f} ℃")
-            c3.metric("최저 일 평균기온", f"{filtered_df['평균기온'].min():.1f} ℃")
-            c4.metric("최고 일 평균기온", f"{filtered_df['평균기온'].max():.1f} ℃")
-
-            fig2 = px.histogram(
-                filtered_df, x="평균기온",
-                color="계절" if len(selected_seasons) > 1 else None,
-                color_discrete_map={"봄": "#2A9D8F", "여름": "#E63946", "가을": "#F4A261", "겨울": "#457B9D"},
-                nbins=int((filtered_df["평균기온"].max() - filtered_df["평균기온"].min()) / bin_size),
-                labels={"평균기온": "일별 평균기온 (℃)", "count": "일수 (일)"},
-                opacity=0.75, barmode="overlay"
-            )
-            fig2.update_layout(template="plotly_white", height=500)
-            st.plotly_chart(fig2, use_container_width=True)
-        else:
-            st.warning("선택한 조건에 해당하는 데이터가 없습니다.")
-
-    # ==========================================
-    # TAB 3: 최저 vs 최고기온 상관관계
-    # ==========================================
-    with tab3:
-        st.header("📉 최저기온 vs 최고기온 상관관계 분석")
-
-        c_col1, c_col2 = st.columns(2)
-        with c_col1:
-            show_ols = st.checkbox("회귀 추세선(Trendline) 표시", value=True, key="tab3_ols")
-        with c_col2:
-            sample_size = st.slider("표시할 데이터 샘플 개수 (0 = 전체)", 0, 10000, 3000, step=1000, key="tab3_sample")
-
-        scatter_df = filtered_df.dropna(subset=["최저기온", "최고기온"])
-        
-        if sample_size > 0 and len(scatter_df) > sample_size:
-            plot_df = scatter_df.sample(n=sample_size, random_state=42)
-        else:
-            plot_df = scatter_df.copy()
-
-        if len(scatter_df) > 0:
-            c1, c2, c3, c4 = st.columns(4)
-            corr = scatter_df["최저기온"].corr(scatter_df["최고기온"])
-            max_range_row = scatter_df.loc[scatter_df["일교차"].idxmax()]
-
-            c1.metric("분석 대상 일수", f"{len(scatter_df):,} 일")
-            c2.metric("상관계수", f"{corr:.3f}")
-            c3.metric("평균 일교차", f"{scatter_df['일교차'].mean():.1f} ℃")
-            c4.metric("최대 일교차 기록", f"{max_range_row['일교차']:.1f} ℃", f"{max_range_row['날짜'].strftime('%Y-%m-%d')}")
-
-            fig3 = px.scatter(
-                plot_df, x="최저기온", y="최고기온", color="계절",
-                color_discrete_map={"봄": "#2A9D8F", "여름": "#E63946", "가을": "#F4A261", "겨울": "#457B9D"},
-                hover_data=["날짜", "일교차"],
-                trendline="ols" if show_ols else None,
-                opacity=0.6
-            )
-            fig3.update_layout(template="plotly_white", height=500)
-            st.plotly_chart(fig3, use_container_width=True)
-        else:
-            st.warning("선택한 조건에 해당하는 데이터가 없습니다.")
-
-    # 상세 데이터 확인 (공통)
-    with st.expander("📋 상세 데이터 확인"):
-        st.dataframe(filtered_df[["날짜", "연도", "계절", "평균기온", "최저기온", "최고기온", "일교차"]], use_container_width=True)
+if __name__ == "__main__":
+    main()
