@@ -8,13 +8,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 전체 HTML/CSS/JS 코드 구성
+# 전체 HTML/CSS/JS 및 Plotly 차트 코드
 html_code = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Plotly.js 차트 라이브러리 로드 -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>
     /* 글로벌 테마 및 리셋 */
     * {
@@ -145,7 +147,28 @@ html_code = """
       cursor: pointer;
     }
 
-    /* 4. 영화 목록 섹션 */
+    /* 4. 그래프 섹션 */
+    .charts-section {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 16px;
+    }
+
+    .chart-card {
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .chart-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 12px;
+    }
+
+    /* 5. 영화 목록 섹션 */
     .content-section {
       margin-top: 10px;
     }
@@ -286,6 +309,7 @@ html_code = """
 <body>
 
   <div class="dashboard-container">
+    <!-- 1. 최상단 헤더 -->
     <header class="top-header">
       <div>
         <h1>CINE-INSIGHT</h1>
@@ -294,6 +318,7 @@ html_code = """
       <span class="status-tag">Live System</span>
     </header>
 
+    <!-- 2. 실시간 극장가 하이라이트 (KPI Overview) -->
     <section class="kpi-overview-section">
       <div class="kpi-card">
         <span class="kpi-label">실시간 예매율 1위</span>
@@ -313,6 +338,7 @@ html_code = """
       </div>
     </section>
 
+    <!-- 3. 영화 검색창 -->
     <section class="search-section">
       <div class="search-bar-wrapper">
         <input type="text" placeholder="영화 제목, 감독, 배우를 검색하세요..." class="search-input" />
@@ -320,6 +346,22 @@ html_code = """
       </div>
     </section>
 
+    <!-- 4. 분석 그래프 영역 (추가된 부분) -->
+    <section class="charts-section">
+      <!-- 그래프 1: 예매율 & 점유율 비교 -->
+      <div class="chart-card">
+        <div class="chart-title">주요 상영작 예매율 및 좌석 점유율 (%)</div>
+        <div id="chart-reservation" style="height: 280px;"></div>
+      </div>
+
+      <!-- 그래프 2: 시간대별 점유 추이 -->
+      <div class="chart-card">
+        <div class="chart-title">시간대별 관객 점유 추이</div>
+        <div id="chart-hourly" style="height: 280px;"></div>
+      </div>
+    </section>
+
+    <!-- 5. 영화 목록 섹션 -->
     <section class="content-section">
       <h2 class="section-title">현재 상영작 (클릭 시 상세정보)</h2>
       <div class="movie-grid">
@@ -358,6 +400,7 @@ html_code = """
     </section>
   </div>
 
+  <!-- 영화 정보 팝업 모달 -->
   <div class="modal-overlay" id="movieModal" onclick="closeModalOutside(event)">
     <div class="modal-content">
       <button class="close-btn" onclick="closeModal()">&times;</button>
@@ -376,6 +419,7 @@ html_code = """
   </div>
 
   <script>
+    // 모달 제어 함수
     function openModal(title, genre, rating, audience, desc) {
       document.getElementById('modalTitle').innerText = title;
       document.getElementById('modalGenre').innerText = genre;
@@ -394,10 +438,63 @@ html_code = """
         closeModal();
       }
     }
+
+    // 그래프 1: 예매율 바 차트
+    const reservationData = [{
+      x: ['파묘', '듄: 파트2', '윙카', '시민덕희'],
+      y: [38.4, 24.1, 12.5, 5.2],
+      type: 'bar',
+      marker: {
+        color: ['#f43f5e', '#38bdf8', '#38bdf8', '#38bdf8']
+      }
+    }];
+
+    const layout1 = {
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
+      margin: { l: 30, r: 20, t: 10, b: 40 },
+      font: { color: '#94a3b8' },
+      xaxis: { gridcolor: '#334155' },
+      yaxis: { gridcolor: '#334155' }
+    };
+
+    Plotly.newPlot('chart-reservation', reservationData, layout1, {responsive: true, displayModeBar: false});
+
+    // 그래프 2: 시간대별 라인 차트
+    const hourlyData = [
+      {
+        x: ['10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'],
+        y: [12, 28, 45, 52, 78, 85, 60],
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: '파묘',
+        line: { color: '#f43f5e', width: 3 }
+      },
+      {
+        x: ['10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'],
+        y: [8, 18, 30, 38, 55, 62, 40],
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: '듄: 파트2',
+        line: { color: '#38bdf8', width: 2 }
+      }
+    ];
+
+    const layout2 = {
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
+      margin: { l: 30, r: 20, t: 10, b: 40 },
+      font: { color: '#94a3b8' },
+      xaxis: { gridcolor: '#334155' },
+      yaxis: { gridcolor: '#334155' },
+      legend: { orientation: 'h', y: 1.15 }
+    };
+
+    Plotly.newPlot('chart-hourly', hourlyData, layout2, {responsive: true, displayModeBar: false});
   </script>
 </body>
 </html>
 """
 
-# Streamlit 화면에 HTML 렌더링
-components.html(html_code, height=900, scrolling=True)
+# Streamlit 화면 출력
+components.html(html_code, height=1250, scrolling=True)
