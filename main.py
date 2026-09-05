@@ -535,3 +535,413 @@ if data_loaded:
             filtered_df[["날짜", "연도", "계절", "평균기온", "최저기온", "최고기온"]],
             use_container_width=True
         )
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import numpy as np
+
+# 페이지 기본 설정
+st.set_page_config(
+    page_title="서울 일별 최저/최고 기온 상관관계 분석",
+    page_icon="🌡️",
+    layout="wide"
+)
+
+# 데이터 로드 및 전처리 함수 (캐싱 적용)
+@st.cache_data
+def load_data():
+    url = "https://raw.githubusercontent.com/greatsong/modudata/main/data/seoul.csv"
+    
+    # 인코딩 예외 처리 (cp949 / euc-kr / utf-8)
+    try:
+        df = pd.read_csv(url, encoding="cp949")
+    except Exception:
+        try:
+            df = pd.read_csv(url, encoding="euc-kr")
+        except Exception:
+            df = pd.read_csv(url, encoding="utf-8")
+            
+    # 컬럼명 공백 제거
+    df.columns = df.columns.str.strip()
+    
+    # 컬럼명 유연성 대응 (단위 표시 포함)
+    col_map = {}
+    for col in df.columns:
+        if "날짜" in col:
+            col_map[col] = "날짜"
+        elif "지점" in col:
+            col_map[col] = "지점"
+        elif "평균" in col:
+            col_map[col] = "평균기온"
+        elif "최저" in col:
+            col_map[col] = "최저기온"
+        elif "최고" in col:
+            col_map[col] = "최고기온"
+            
+    df = df.rename(columns=col_map)
+    
+    # 날짜 변환 및 수치형 데이터 변환
+    df["날짜"] = pd.to_datetime(df["날짜"], errors="coerce")
+    
+    for temp_col in ["평균기온", "최저기온", "최고기온"]:
+        if temp_col in df.columns:
+            df[temp_col] = pd.to_numeric(df[temp_col], errors="coerce")
+            
+    # 최저기온과 최고기온에 결측치가 있는 행 제거
+    df = df.dropna(subset=["날짜", "최저기온", "최고기온"])
+    
+    # 파생 변수 생성 (연도, 월, 계절, 일교차)
+    df["연도"] = df["날짜"].dt.year
+    df["월"] = df["날짜"].dt.month
+    df["일교차"] = df["최고기온"] - df["최저기온"]
+    df["계절"] = df["월"].map({
+        12: "겨울", 1: "겨울", 2: "겨울",
+        3: "봄", 4: "봄", 5: "봄",
+        6: "여름", 7: "여름", 8: "여름",
+        9: "가을", 10: "가을", 11: "가을"
+    })
+    
+    return df
+
+# 데이터 로딩
+try:
+    df = load_data()
+    data_loaded = True
+except Exception as e:
+    data_loaded = False
+    st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
+
+if data_loaded:
+    st.sidebar.header("⚙️ 분석 및 시각화 설정")
+    
+    min_year = int(df["연도"].min())
+    max_year = int(df["연도"].max())
+    
+    # [오류 해결] key 파라미터를 지정하여 StreamlitDuplicateElementId 방지
+    year_range = st.sidebar.slider(
+        "조회 연도 범위 선택",
+        min_value=min_year,
+        max_value=max_year,
+        value=(min_year, max_year),
+        key="scatter_year_range_slider"
+    )
+    
+    selected_seasons = st.sidebar.multiselect(
+        "계절 선택",
+        options=["봄", "여름", "가을", "겨울"],
+        default=["봄", "여름", "가을", "겨울"],
+        key="scatter_season_multiselect"
+    )
+    
+    show_ols = st.sidebar.checkbox(
+        "회귀 추세선(Trendline) 표시",
+        value=True,
+        key="scatter_show_ols_checkbox"
+    )
+
+    sample_size = st.sidebar.slider(
+        "표시할 데이터 샘플 개수 (0 = 전체 표시)",
+        min_value=0,
+        max_value=10000,
+        value=3000,
+        step=1000,
+        key="scatter_sample_size_slider",
+        help="데이터 양이 너무 많을 경우 앱의 응답 속도를 향상시키기 위한 샘플링 설정입니다."
+    )
+    
+    # 선택된 범위 및 계절 데이터 필터링
+    filtered_df = df[
+        (df["연도"] >= year_range[0]) & 
+        (df["연도"] <= year_range[1]) &
+        (df["계절"].isin(selected_seasons))
+    ]
+
+    # 샘플링 적용 (웹 앱 반응속도 최적화)
+    if sample_size > 0 and len(filtered_df) > sample_size:
+        plot_df = filtered_df.sample(n=sample_size, random_state=42).copy()
+    else:
+        plot_df = filtered_df.copy()
+
+    # 헤더 섹션
+    st.title("🌡️ 서울 일별 최저기온 vs 최고기온 상관관계 분석")
+    st.markdown(
+        f"**{year_range[0]}년부터 {year_range[1]}년까지** 서울의 **일별 최저기온과 최고기온 간의 양의 상관관계**를 산점도로 보여줍니다."
+    )
+    st.markdown("---")
+
+    # 요약 지표 (Metrics)
+    col1, col2, col3, col4 = st.columns(4)
+    
+    total_days = len(filtered_df)
+    if total_days > 0:
+        # 피어슨 상관계수 계산
+        corr = filtered_df["최저기온"].corr(filtered_df["최고기온"])
+        avg_range = filtered_df["일교차"].mean()
+        max_range_row = filtered_df.loc[filtered_df["일교차"].idxmax()]
+        
+        col1.metric("분석 대상 일수", f"{total_days:,} 일")
+        col2.metric("최저-최고기온 상관계수", f"{corr:.3f}")
+        col3.metric("평균 일교차", f"{avg_range:.1f} ℃")
+        col4.metric("최대 일교차 기록", f"{max_range_row['일교차']:.1f} ℃", f"{max_range_row['날짜'].strftime('%Y-%m-%d')}")
+    else:
+        col1.metric("분석 대상 일수", "0 일")
+
+    st.markdown("---")
+
+    # 산점도 시각화
+    st.subheader("📉 최저기온 vs 최고기온 산점도 (Scatter Plot)")
+
+    if len(plot_df) > 0:
+        fig = px.scatter(
+            plot_df,
+            x="최저기온",
+            y="최고기온",
+            color="계절",
+            color_discrete_map={
+                "봄": "#2A9D8F",
+                "여름": "#E63946",
+                "가을": "#F4A261",
+                "겨울": "#457B9D"
+            },
+            hover_data=["날짜", "일교차"],
+            trendline="ols" if show_ols else None,
+            title=f"최저기온과 최고기온 분포 (표시 점 개수: {len(plot_df):,}개)",
+            labels={"최저기온": "일 최저기온 (℃)", "최고기온": "일 최고기온 (℃)"},
+            opacity=0.6
+        )
+
+        # 기준선 (1:1 선, y = x) 추가
+        min_val = min(plot_df["최저기온"].min(), plot_df["최고기온"].min())
+        max_val = max(plot_df["최저기온"].max(), plot_df["최고기온"].max())
+        
+        fig.add_trace(go.Scatter(
+            x=[min_val, max_val],
+            y=[min_val, max_val],
+            mode="lines",
+            name="등가선 (최저=최고)",
+            line=dict(color="gray", dash="dot", width=1)
+        ))
+
+        fig.update_layout(
+            xaxis_title="일 최저기온 (℃)",
+            yaxis_title="일 최고기온 (℃)",
+            template="plotly_white",
+            height=580
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("선택한 조건에 해당하는 데이터가 없습니다.")
+
+    # 상세 데이터 레이아웃
+    with st.expander("📋 필터링된 일별 상세 데이터 확인"):
+        st.dataframe(
+            filtered_df[["날짜", "연도", "계절", "최저기온", "최고기온", "일교차"]],
+            use_container_width=True
+        )
+        import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import numpy as np
+
+# 페이지 기본 설정
+st.set_page_config(
+    page_title="서울 일별 최저/최고 기온 상관관계 분석",
+    page_icon="🌡️",
+    layout="wide"
+)
+
+# 데이터 로드 및 전처리 함수 (캐싱 적용)
+@st.cache_data
+def load_data():
+    url = "https://raw.githubusercontent.com/greatsong/modudata/main/data/seoul.csv"
+    
+    # 인코딩 예외 처리 (cp949 / euc-kr / utf-8)
+    try:
+        df = pd.read_csv(url, encoding="cp949")
+    except Exception:
+        try:
+            df = pd.read_csv(url, encoding="euc-kr")
+        except Exception:
+            df = pd.read_csv(url, encoding="utf-8")
+            
+    # 컬럼명 공백 제거
+    df.columns = df.columns.str.strip()
+    
+    # 컬럼명 유연성 대응 (단위 표시 포함)
+    col_map = {}
+    for col in df.columns:
+        if "날짜" in col:
+            col_map[col] = "날짜"
+        elif "지점" in col:
+            col_map[col] = "지점"
+        elif "평균" in col:
+            col_map[col] = "평균기온"
+        elif "최저" in col:
+            col_map[col] = "최저기온"
+        elif "최고" in col:
+            col_map[col] = "최고기온"
+            
+    df = df.rename(columns=col_map)
+    
+    # 날짜 변환 및 수치형 데이터 변환
+    df["날짜"] = pd.to_datetime(df["날짜"], errors="coerce")
+    
+    for temp_col in ["평균기온", "최저기온", "최고기온"]:
+        if temp_col in df.columns:
+            df[temp_col] = pd.to_numeric(df[temp_col], errors="coerce")
+            
+    # 최저기온과 최고기온에 결측치가 있는 행 제거
+    df = df.dropna(subset=["날짜", "최저기온", "최고기온"])
+    
+    # 파생 변수 생성 (연도, 월, 계절, 일교차)
+    df["연도"] = df["날짜"].dt.year
+    df["월"] = df["날짜"].dt.month
+    df["일교차"] = df["최고기온"] - df["최저기온"]
+    df["계절"] = df["월"].map({
+        12: "겨울", 1: "겨울", 2: "겨울",
+        3: "봄", 4: "봄", 5: "봄",
+        6: "여름", 7: "여름", 8: "여름",
+        9: "가을", 10: "가을", 11: "가을"
+    })
+    
+    return df
+
+# 데이터 로딩
+try:
+    df = load_data()
+    data_loaded = True
+except Exception as e:
+    data_loaded = False
+    st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
+
+if data_loaded:
+    st.sidebar.header("⚙️ 분석 및 시각화 설정")
+    
+    min_year = int(df["연도"].min())
+    max_year = int(df["연도"].max())
+    
+    # [오류 해결] key 파라미터를 지정하여 StreamlitDuplicateElementId 방지
+    year_range = st.sidebar.slider(
+        "조회 연도 범위 선택",
+        min_value=min_year,
+        max_value=max_year,
+        value=(min_year, max_year),
+        key="scatter_year_range_slider"
+    )
+    
+    selected_seasons = st.sidebar.multiselect(
+        "계절 선택",
+        options=["봄", "여름", "가을", "겨울"],
+        default=["봄", "여름", "가을", "겨울"],
+        key="scatter_season_multiselect"
+    )
+    
+    show_ols = st.sidebar.checkbox(
+        "회귀 추세선(Trendline) 표시",
+        value=True,
+        key="scatter_show_ols_checkbox"
+    )
+
+    sample_size = st.sidebar.slider(
+        "표시할 데이터 샘플 개수 (0 = 전체 표시)",
+        min_value=0,
+        max_value=10000,
+        value=3000,
+        step=1000,
+        key="scatter_sample_size_slider",
+        help="데이터 양이 너무 많을 경우 앱의 응답 속도를 향상시키기 위한 샘플링 설정입니다."
+    )
+    
+    # 선택된 범위 및 계절 데이터 필터링
+    filtered_df = df[
+        (df["연도"] >= year_range[0]) & 
+        (df["연도"] <= year_range[1]) &
+        (df["계절"].isin(selected_seasons))
+    ]
+
+    # 샘플링 적용 (웹 앱 반응속도 최적화)
+    if sample_size > 0 and len(filtered_df) > sample_size:
+        plot_df = filtered_df.sample(n=sample_size, random_state=42).copy()
+    else:
+        plot_df = filtered_df.copy()
+
+    # 헤더 섹션
+    st.title("🌡️ 서울 일별 최저기온 vs 최고기온 상관관계 분석")
+    st.markdown(
+        f"**{year_range[0]}년부터 {year_range[1]}년까지** 서울의 **일별 최저기온과 최고기온 간의 양의 상관관계**를 산점도로 보여줍니다."
+    )
+    st.markdown("---")
+
+    # 요약 지표 (Metrics)
+    col1, col2, col3, col4 = st.columns(4)
+    
+    total_days = len(filtered_df)
+    if total_days > 0:
+        # 피어슨 상관계수 계산
+        corr = filtered_df["최저기온"].corr(filtered_df["최고기온"])
+        avg_range = filtered_df["일교차"].mean()
+        max_range_row = filtered_df.loc[filtered_df["일교차"].idxmax()]
+        
+        col1.metric("분석 대상 일수", f"{total_days:,} 일")
+        col2.metric("최저-최고기온 상관계수", f"{corr:.3f}")
+        col3.metric("평균 일교차", f"{avg_range:.1f} ℃")
+        col4.metric("최대 일교차 기록", f"{max_range_row['일교차']:.1f} ℃", f"{max_range_row['날짜'].strftime('%Y-%m-%d')}")
+    else:
+        col1.metric("분석 대상 일수", "0 일")
+
+    st.markdown("---")
+
+    # 산점도 시각화
+    st.subheader("📉 최저기온 vs 최고기온 산점도 (Scatter Plot)")
+
+    if len(plot_df) > 0:
+        fig = px.scatter(
+            plot_df,
+            x="최저기온",
+            y="최고기온",
+            color="계절",
+            color_discrete_map={
+                "봄": "#2A9D8F",
+                "여름": "#E63946",
+                "가을": "#F4A261",
+                "겨울": "#457B9D"
+            },
+            hover_data=["날짜", "일교차"],
+            trendline="ols" if show_ols else None,
+            title=f"최저기온과 최고기온 분포 (표시 점 개수: {len(plot_df):,}개)",
+            labels={"최저기온": "일 최저기온 (℃)", "최고기온": "일 최고기온 (℃)"},
+            opacity=0.6
+        )
+
+        # 기준선 (1:1 선, y = x) 추가
+        min_val = min(plot_df["최저기온"].min(), plot_df["최고기온"].min())
+        max_val = max(plot_df["최저기온"].max(), plot_df["최고기온"].max())
+        
+        fig.add_trace(go.Scatter(
+            x=[min_val, max_val],
+            y=[min_val, max_val],
+            mode="lines",
+            name="등가선 (최저=최고)",
+            line=dict(color="gray", dash="dot", width=1)
+        ))
+
+        fig.update_layout(
+            xaxis_title="일 최저기온 (℃)",
+            yaxis_title="일 최고기온 (℃)",
+            template="plotly_white",
+            height=580
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("선택한 조건에 해당하는 데이터가 없습니다.")
+
+    # 상세 데이터 레이아웃
+    with st.expander("📋 필터링된 일별 상세 데이터 확인"):
+        st.dataframe(
+            filtered_df[["날짜", "연도", "계절", "최저기온", "최고기온", "일교차"]],
+            use_container_width=True
+        )
