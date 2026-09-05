@@ -3,3 +3,6 @@ requests
 pandas
 plotly
 pytz
+altair
+st-annotated-text
+streamlit-option-menu
