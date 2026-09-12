@@ -225,53 +225,86 @@ for col,school in zip(cols,SCHOOLS):
 
 st.divider()
 
+st.divider()
 st.header("🦐 갑각류 메뉴 날짜별 확인")
 
-school_choice=st.selectbox(
+school_choice = st.selectbox(
     "학교 선택",
-    SCHOOLS
+    SCHOOLS,
+    key="shell_school"
 )
 
-school_shell=shellfish_df[shellfish_df["학교"]==school_choice].sort_values("날짜")
+school_shell = (
+    shellfish_df[shellfish_df["학교"] == school_choice]
+    .sort_values("날짜")
+)
 
 st.write(f"총 **{len(school_shell)}회** 갑각류 메뉴가 제공되었습니다.")
 
-for _,r in school_shell.iterrows():
+st.subheader("최근 3일")
 
-    st.markdown(
-        f"""
+for _, r in school_shell.head(3).iterrows():
+    st.markdown(f"""
+    <div class="shell-card">
+        <h4>🗓 {r['날짜']}</h4>
+        <p><b>🍤 갑각류 메뉴</b> : {r['갑각류메뉴']}</p>
+        <p>{r['전체메뉴']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with st.expander("📖 전체 갑각류 메뉴 보기"):
+    for _, r in school_shell.iterrows():
+        st.markdown(f"""
         <div class="shell-card">
             <h4>🗓 {r['날짜']}</h4>
-            <p><b>갑각류 메뉴 :</b> {r['갑각류메뉴']}</p>
+            <p><b>🍤 갑각류 메뉴</b> : {r['갑각류메뉴']}</p>
             <p>{r['전체메뉴']}</p>
         </div>
-        """,
-        unsafe_allow_html=True
-    )
-
+        """, unsafe_allow_html=True)
 st.divider()
-st.header("🍰 디저트 검색")
+st.header("🍰 디저트 메뉴 날짜별 확인")
+
+dessert_school = st.selectbox(
+    "학교 선택",
+    SCHOOLS,
+    key="dessert_school"
+)
 
 search = st.text_input(
-    "디저트 이름을 검색하세요.",
+    "🔍 디저트 검색",
     placeholder="예) 마카롱, 아이스크림, 수박, 케이크..."
 )
 
-if search:
-    result = dessert_df[
-        dessert_df["디저트"].str.contains(search, case=False, na=False)
-    ]
-else:
-    result = dessert_df.copy()
-
-st.write(f"검색 결과 **{len(result)}개**")
-
-st.dataframe(
-    result.sort_values(["학교", "날짜"]),
-    use_container_width=True,
-    hide_index=True
+school_dessert = (
+    dessert_df[dessert_df["학교"] == dessert_school]
+    .sort_values("날짜")
 )
 
+if search:
+    school_dessert = school_dessert[
+        school_dessert["디저트"].str.contains(search, case=False, na=False)
+    ]
+
+st.write(f"총 **{len(school_dessert)}개**의 디저트가 검색되었습니다.")
+
+st.subheader("최근 3일")
+
+for _, r in school_dessert.head(3).iterrows():
+    st.markdown(f"""
+    <div class="dessert-card">
+        <h4>🗓 {r['날짜']}</h4>
+        <p><b>🍰 디저트</b> : {r['디저트']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with st.expander("📖 전체 디저트 일정 보기"):
+    for _, r in school_dessert.iterrows():
+        st.markdown(f"""
+        <div class="dessert-card">
+            <h4>🗓 {r['날짜']}</h4>
+            <p><b>🍰 디저트</b> : {r['디저트']}</p>
+        </div>
+        """, unsafe_allow_html=True)
 st.divider()
 
 st.header("📊 학교별 디저트 제공 횟수")
