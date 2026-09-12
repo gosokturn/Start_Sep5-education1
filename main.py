@@ -255,3 +255,84 @@ st.header("그래프 5. (추가 예정)")
 st.write("이 구역에 다음 그래프를 추가합니다.")
 
 st.divider()
+# ===============================
+# 그래프 5
+# ===============================
+st.header("그래프 5. 월 × 요일별 일관객 합계")
+
+weekday_order = [
+    "월요일",
+    "화요일",
+    "수요일",
+    "목요일",
+    "금요일",
+    "토요일",
+    "일요일"
+]
+
+df["월"] = df["날짜"].dt.month
+df["요일"] = df["날짜"].dt.dayofweek.map(
+    dict(enumerate(weekday_order))
+)
+
+month_weekday = (
+    df.groupby(["월", "요일"], as_index=False)["일관객"]
+    .sum()
+)
+
+heatmap_data = (
+    month_weekday
+    .pivot(
+        index="월",
+        columns="요일",
+        values="일관객"
+    )
+    .reindex(columns=weekday_order)
+    .fillna(0)
+)
+
+fig5 = px.imshow(
+    heatmap_data,
+    labels={
+        "x": "요일",
+        "y": "월",
+        "color": "일관객 합계"
+    },
+    x=weekday_order,
+    y=heatmap_data.index,
+    text_auto=",",
+    aspect="auto",
+    color_continuous_scale="Blues",
+    title="월 × 요일별 일관객 합계"
+)
+
+fig5.update_traces(
+    hovertemplate=(
+        "%{y}월 %{x}<br>"
+        "일관객 합계: %{z:,}명"
+        "<extra></extra>"
+    )
+)
+
+fig5.update_layout(
+    xaxis_title="요일",
+    yaxis_title="월"
+)
+
+st.plotly_chart(
+    fig5,
+    use_container_width=True
+)
+
+st.info("**이 그래프로 알 수 있는 것:** (여기에 한 문장을 작성하면 됩니다.)")
+
+st.divider()
+
+
+# ===============================
+# 그래프 6 (추가 예정)
+# ===============================
+st.header("그래프 6. (추가 예정)")
+st.write("이 구역에 다음 그래프를 추가합니다.")
+
+st.divider()
