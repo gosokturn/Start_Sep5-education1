@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 st.set_page_config(
     page_title="영화 데이터 그래프 도감 1 - 시간",
@@ -122,9 +123,68 @@ st.divider()
 
 
 # ===============================
-# 그래프 3 (추가 예정)
+# 그래프 3
 # ===============================
-st.header("그래프 3. (추가 예정)")
+st.header("그래프 3. 날짜별 10위권 일관객 합계")
+
+daily_total = (
+    df.groupby("날짜", as_index=False)["일관객"]
+    .sum()
+    .sort_values("날짜")
+)
+
+top3_days = (
+    daily_total
+    .nlargest(3, "일관객")
+    .sort_values("날짜")
+)
+
+fig3 = go.Figure()
+
+fig3.add_trace(
+    go.Scatter(
+        x=daily_total["날짜"],
+        y=daily_total["일관객"],
+        mode="lines",
+        fill="tozeroy",
+        name="10위권 일관객 합계",
+        hovertemplate="날짜: %{x|%Y-%m-%d}<br>일관객 합계: %{y:,}명<extra></extra>"
+    )
+)
+
+fig3.add_trace(
+    go.Scatter(
+        x=top3_days["날짜"],
+        y=top3_days["일관객"],
+        mode="markers+text",
+        text=top3_days["날짜"].dt.strftime("%Y-%m-%d"),
+        textposition="top center",
+        name="일관객 합계 상위 3일",
+        hovertemplate="날짜: %{x|%Y-%m-%d}<br>일관객 합계: %{y:,}명<extra></extra>"
+    )
+)
+
+fig3.update_layout(
+    title="날짜별 10위권 일관객 합계",
+    xaxis_title="날짜",
+    yaxis_title="일관객 합계",
+    hovermode="x"
+)
+
+st.plotly_chart(
+    fig3,
+    use_container_width=True
+)
+
+st.info("**이 그래프로 알 수 있는 것:** (여기에 한 문장을 작성하면 됩니다.)")
+
+st.divider()
+
+
+# ===============================
+# 그래프 4 (추가 예정)
+# ===============================
+st.header("그래프 4. (추가 예정)")
 st.write("이 구역에 다음 시간 관련 그래프를 추가합니다.")
 
 st.divider()
