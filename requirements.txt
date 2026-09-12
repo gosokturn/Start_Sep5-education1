@@ -1,8 +1,5 @@
 streamlit
-requests
 pandas
+numpy
+scikit-learn
 plotly
-pytz
-altair
-st-annotated-text
-streamlit-option-menu
