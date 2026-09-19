@@ -214,3 +214,54 @@ st.info(
     사후 집계 데이터를 이용한 회귀 모델의 예측 성능**입니다.
     """
 )
+
+st.subheader("⚖️ 기본 변수와 첫 주 관객 추가 모델 비교")
+
+base_features = ["first_scrn", "first_show", "peak"]
+week_features = ["first_scrn", "first_show", "peak", "first_week_audi"]
+
+
+def evaluate_model(feature_list):
+    temp_X = movies[feature_list].copy()
+
+    if "genre" in feature_list or "nation" in feature_list:
+        cat_cols = [c for c in ["genre", "nation"] if c in feature_list]
+        temp_X = pd.get_dummies(temp_X, columns=cat_cols)
+
+    temp_X = temp_X.fillna(0)
+
+    X_train = temp_X[train_mask]
+    X_test = temp_X[test_mask]
+
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+
+    pred = np.maximum(model.predict(X_test), 0)
+
+    return {
+        "R²": r2_score(y_test, pred),
+        "MAE": mean_absolute_error(y_test, pred),
+        "RMSE": np.sqrt(mean_squared_error(y_test, pred)),
+    }
+
+
+base_score = evaluate_model(base_features)
+week_score = evaluate_model(week_features)
+
+compare_df = pd.DataFrame(
+    {
+        "평가 지표": ["R²", "MAE(명)", "RMSE(명)"],
+        "기본 변수 3개": [
+            round(base_score["R²"], 3),
+            f"{base_score['MAE']:,.0f}",
+            f"{base_score['RMSE']:,.0f}",
+        ],
+        "첫 주 관객 추가": [
+            round(week_score["R²"], 3),
+            f"{week_score['MAE']:,.0f}",
+            f"{week_score['RMSE']:,.0f}",
+        ],
+    }
+)
+
+st.dataframe(compare_df, use_container_width=True)
