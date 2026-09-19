@@ -201,3 +201,16 @@ st.subheader("📌 회귀계수")
 st.dataframe(coef, use_container_width=True)
 
 st.caption("모든 영화(kobis_movies.csv)를 사용하며 movieCd 오름차순으로 정렬 후 매 10편마다 앞의 3편을 테스트용으로 분리하여 평가했습니다.")
+
+st.info(
+    """
+    **안내**
+
+    이 모델은 `kobis_movies.csv`에 사후 집계된 정보를 이용해 학습합니다.
+    특히 `첫 주 관객 수(first_week_audi)`, `TOP10 진입 일수(days_in_top10)` 등은
+    영화가 개봉한 이후에 알 수 있는 값입니다.
+
+    따라서 이 결과는 **실제 개봉 전 흥행 예측 성능이 아니라,
+    사후 집계 데이터를 이용한 회귀 모델의 예측 성능**입니다.
+    """
+)
