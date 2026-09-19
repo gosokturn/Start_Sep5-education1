@@ -116,3 +116,63 @@ st.subheader("📐 회귀식")
 st.write(f"평균기온 = {a:.5f} × (연도 - 1908) + {b:.5f}")
 
 st.caption("회귀 직선은 1908년부터 지난 연수를 독립 변수로 하여 계산했습니다.")
+# -------------------------------
+# 전체 기간 회귀
+# -------------------------------
+x_all = yearly["지난연수"].values
+y_all = yearly["평균기온"].values
+
+a_all, b_all = np.polyfit(x_all, y_all, 1)
+yearly["회귀기온"] = a_all * yearly["지난연수"] + b_all
+
+corr = np.corrcoef(yearly["연도"], yearly["평균기온"])[0, 1]
+
+# -------------------------------
+# 최근 20년 회귀
+# -------------------------------
+end_year = yearly["연도"].max()
+recent = yearly[yearly["연도"] >= end_year - 19].copy()
+
+x_recent = recent["지난연수"].values
+y_recent = recent["평균기온"].values
+
+a_recent, b_recent = np.polyfit(x_recent, y_recent, 1)
+
+# 100년당 상승 기온
+rise100_all = a_all * 100
+rise100_recent = a_recent * 100
+
+st.subheader("🌍 기온 상승 속도 (100년 기준)")
+
+col1, col2 = st.columns(2)
+
+col1.metric(
+    "전체 기간",
+    f"{rise100_all:.2f} ℃",
+    "100년당 상승"
+)
+
+col2.metric(
+    "최근 20년",
+    f"{rise100_recent:.2f} ℃",
+    "100년당 상승"
+)
+fig.add_trace(
+    go.Scatter(
+        x=recent["연도"],
+        y=a_recent * recent["지난연수"] + b_recent,
+        mode="lines",
+        name="최근 20년 회귀직선",
+        line=dict(width=3, dash="dash")
+    )
+)
+prediction = a_all * years_from_1908 + b_all
+st.subheader("📐 회귀식")
+
+st.write(
+    f"전체 기간 : 평균기온 = {a_all:.5f} × (연도 - 1908) + {b_all:.5f}"
+)
+
+st.write(
+    f"최근 20년 : 평균기온 = {a_recent:.5f} × (연도 - 1908) + {b_recent:.5f}"
+)
