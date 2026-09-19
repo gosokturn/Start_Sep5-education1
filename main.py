@@ -1,4 +1,4 @@
-
+import math
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -24,10 +24,12 @@ for c in numeric_cols:
     df[c] = pd.to_numeric(df[c], errors="coerce")
 
 df["log_first_scrn"] = df["first_scrn"].apply(
-    lambda x: None if pd.isna(x) or x <= 0 else pd.np.log10(x)
+    lambda x: pd.NA if pd.isna(x) or x <= 0 else math.log10(x)
 )
+
 df["log_total_audi"] = df["total_audi"].apply(
-    lambda x: None if pd.isna(x) or x <= 0 else pd.np.log10(x)
+    lambda x: pd.NA if pd.isna(x) or x <= 0 else math.log10(x)
+)
 )
 
 df["longrun_index"] = df["total_audi"] / df["first_week_audi"]
