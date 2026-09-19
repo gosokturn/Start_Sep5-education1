@@ -3,176 +3,201 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="기온 예측기", page_icon="🌡️")
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import (
+    r2_score,
+    mean_absolute_error,
+    mean_squared_error,
+)
 
-st.title("🌡️ 서울 기온 예측기")
+st.set_page_config(page_title="영화 흥행 예측기", layout="wide")
 
-URL = "https://raw.githubusercontent.com/greatsong/modudata/bb860932644270ad1199f10d3e7670e30231bce4/data/seoul.csv"
+st.title("🎬 영화 흥행 예측기 (다중 회귀)")
+
+MOVIES_URL = "https://raw.githubusercontent.com/greatsong/modudata/main/data/kobis_movies.csv"
+DAILY_URL = "https://raw.githubusercontent.com/greatsong/modudata/main/data/kobis_daily.csv"
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv(URL, encoding="utf-8")
+    movies = pd.read_csv(MOVIES_URL, encoding="utf-8")
+    daily = pd.read_csv(DAILY_URL, encoding="utf-8")
+    return movies, daily
 
-    df.columns = ["날짜", "지점", "평균기온", "최저기온", "최고기온"]
+movies, daily = load_data()
 
-    df["날짜"] = pd.to_datetime(df["날짜"])
-    df["연도"] = df["날짜"].dt.year
+daily["날짜"] = pd.to_datetime(daily["날짜"].astype(str), format="%Y%m%d")
+start_date = daily["날짜"].min().date()
+end_date = daily["날짜"].max().date()
 
-    df["평균기온"] = pd.to_numeric(df["평균기온"], errors="coerce")
-    df = df.dropna(subset=["평균기온"])
+st.subheader("📅 데이터 기준 기간")
+st.write(f"**{start_date} ~ {end_date}**")
 
-    df = df[df["연도"] <= 2025]
+st.subheader("🎞 영화 정보 표 (맨 위 10줄)")
+st.dataframe(movies.head(10), use_container_width=True)
 
-    count_df = df.groupby("연도").size().reset_index(name="관측일수")
-    valid_years = count_df[count_df["관측일수"] >= 300]["연도"]
+movies = movies.sort_values("movieCd").reset_index(drop=True)
 
-    yearly = (
-        df[df["연도"].isin(valid_years)]
-        .groupby("연도")["평균기온"]
-        .mean()
-        .reset_index()
-    )
+feature_candidates = {
+    "first_scrn": "첫 관측일 스크린수",
+    "first_show": "첫 관측일 상영횟수",
+    "peak": "성수기 개봉 여부",
+    "first_week_audi": "첫 주 관객 수",
+    "days_in_top10": "TOP10 진입 일수",
+    "genre": "장르",
+    "nation": "국가",
+}
 
-    yearly["지난연수"] = yearly["연도"] - 1908
+st.subheader("✅ 사용할 변수 선택")
 
-    return yearly
+selected_features = []
 
-yearly = load_data()
+cols = st.columns(2)
 
-x = yearly["지난연수"].values
-y = yearly["평균기온"].values
+for i, (col, label) in enumerate(feature_candidates.items()):
+    if cols[i % 2].checkbox(label, value=True):
+        selected_features.append(col)
 
-a, b = np.polyfit(x, y, 1)
+if len(selected_features) == 0:
+    st.warning("최소 하나 이상의 변수를 선택하세요.")
+    st.stop()
 
-yearly["회귀기온"] = a * yearly["지난연수"] + b
+X = movies[selected_features].copy()
+y = movies["total_audi"]
 
-corr = np.corrcoef(yearly["연도"], yearly["평균기온"])[0, 1]
+categorical = [c for c in ["genre", "nation"] if c in selected_features]
 
-st.subheader("📊 데이터 정보")
+if categorical:
+    X = pd.get_dummies(X, columns=categorical)
 
-col1, col2, col3 = st.columns(3)
+X = X.fillna(0)
 
-col1.metric("사용한 연도 수", len(yearly))
-col2.metric("시작 연도", int(yearly["연도"].min()))
-col3.metric("끝 연도", int(yearly["연도"].max()))
+test_mask = np.zeros(len(movies), dtype=bool)
 
-st.metric("상관계수 (Pearson)", f"{corr:.4f}")
+for start in range(0, len(movies), 10):
+    test_mask[start:start+3] = True
+
+train_mask = ~test_mask
+
+X_train = X[train_mask]
+X_test = X[test_mask]
+
+y_train = y[train_mask]
+y_test = y[test_mask]
+
+test_movies = movies[test_mask][["movieCd", "movieNm", "total_audi"]].copy()
+
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+pred = model.predict(X_test)
+pred = np.maximum(pred, 0)
+
+r2 = r2_score(y_test, pred)
+mae = mean_absolute_error(y_test, pred)
+rmse = np.sqrt(mean_squared_error(y_test, pred))
+
+st.subheader("📊 학습 정보")
+
+c1, c2, c3 = st.columns(3)
+
+c1.metric("학습 영화 수", len(X_train))
+c2.metric("평가 영화 수", len(X_test))
+c3.metric("사용 변수 수", len(selected_features))
+
+st.write("**사용한 변수**")
+st.write(", ".join([feature_candidates[f] for f in selected_features]))
+
+st.subheader("📈 모델 평가")
+
+m1, m2, m3 = st.columns(3)
+
+m1.metric("R² 점수", f"{r2:.3f}")
+m2.metric("MAE", f"{mae:,.0f} 명")
+m3.metric("RMSE", f"{rmse:,.0f} 명")
+
+result = test_movies.copy()
+result["예측 총관객"] = pred.round().astype(int)
+result["오차(명)"] = result["예측 총관객"] - result["total_audi"]
+result["오차율(%)"] = (
+    result["오차(명)"] / result["total_audi"] * 100
+).round(2)
+
+st.subheader("🎯 테스트 영화 예측 결과")
+
+st.dataframe(
+    result.rename(
+        columns={
+            "movieCd": "영화코드",
+            "movieNm": "영화명",
+            "total_audi": "실제 총관객",
+        }
+    ),
+    use_container_width=True,
+)
+
+plot_y = result["예측 총관객"].clip(lower=1000)
+small_pred = (result["예측 총관객"] < 1000).sum()
+
+st.subheader("📉 실제 총관객 vs 예측 총관객")
+
+st.write(f"예측값이 **1,000명보다 작은 영화: {small_pred}편**")
+
+min_axis = max(1000, int(result["total_audi"].min()))
+max_axis = int(
+    max(result["total_audi"].max(), result["예측 총관객"].max())
+)
 
 fig = go.Figure()
 
 fig.add_trace(
     go.Scatter(
-        x=yearly["연도"],
-        y=yearly["평균기온"],
+        x=result["total_audi"],
+        y=plot_y,
         mode="markers",
-        name="연평균기온",
-        marker=dict(size=8)
+        text=result["movieNm"],
+        customdata=result["예측 총관객"],
+        hovertemplate=(
+            "<b>%{text}</b><br>"
+            "실제: %{x:,}명<br>"
+            "예측: %{customdata:,}명<extra></extra>"
+        ),
     )
 )
 
 fig.add_trace(
     go.Scatter(
-        x=yearly["연도"],
-        y=yearly["회귀기온"],
+        x=[min_axis, max_axis],
+        y=[min_axis, max_axis],
         mode="lines",
-        name="회귀직선",
-        line=dict(width=3)
+        name="실제 = 예측",
+        line=dict(dash="dash"),
     )
 )
 
 fig.update_layout(
-    title="서울 연도별 평균기온과 회귀직선",
-    xaxis_title="연도",
-    yaxis_title="평균기온(℃)",
-    height=550
+    height=650,
+    xaxis=dict(
+        title="실제 총관객 수",
+        type="log",
+    ),
+    yaxis=dict(
+        title="예측 총관객 수",
+        type="log",
+    ),
+    legend=dict(orientation="h"),
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-st.subheader("🔮 미래 평균기온 예측")
+coef = pd.DataFrame(
+    {
+        "변수": X.columns,
+        "회귀계수": model.coef_,
+    }
+).sort_values("회귀계수", key=np.abs, ascending=False)
 
-year = st.slider("연도를 선택하세요.", 1900, 2100, 2025)
+st.subheader("📌 회귀계수")
 
-years_from_1908 = year - 1908
-prediction = a * years_from_1908 + b
+st.dataframe(coef, use_container_width=True)
 
-st.markdown("### 선택한 연도의 예상 평균기온")
-
-st.markdown(
-    f"""
-    <div style="text-align:center;
-                padding:20px;
-                border-radius:15px;
-                background:#EAF4FF;">
-        <h1 style="font-size:56px; color:#1565C0;">{prediction:.2f} ℃</h1>
-        <h2>{year}년</h2>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-st.subheader("📐 회귀식")
-
-st.write(f"평균기온 = {a:.5f} × (연도 - 1908) + {b:.5f}")
-
-st.caption("회귀 직선은 1908년부터 지난 연수를 독립 변수로 하여 계산했습니다.")
-# -------------------------------
-# 전체 기간 회귀
-# -------------------------------
-x_all = yearly["지난연수"].values
-y_all = yearly["평균기온"].values
-
-a_all, b_all = np.polyfit(x_all, y_all, 1)
-yearly["회귀기온"] = a_all * yearly["지난연수"] + b_all
-
-corr = np.corrcoef(yearly["연도"], yearly["평균기온"])[0, 1]
-
-# -------------------------------
-# 최근 20년 회귀
-# -------------------------------
-end_year = yearly["연도"].max()
-recent = yearly[yearly["연도"] >= end_year - 19].copy()
-
-x_recent = recent["지난연수"].values
-y_recent = recent["평균기온"].values
-
-a_recent, b_recent = np.polyfit(x_recent, y_recent, 1)
-
-# 100년당 상승 기온
-rise100_all = a_all * 100
-rise100_recent = a_recent * 100
-
-st.subheader("🌍 기온 상승 속도 (100년 기준)")
-
-col1, col2 = st.columns(2)
-
-col1.metric(
-    "전체 기간",
-    f"{rise100_all:.2f} ℃",
-    "100년당 상승"
-)
-
-col2.metric(
-    "최근 20년",
-    f"{rise100_recent:.2f} ℃",
-    "100년당 상승"
-)
-fig.add_trace(
-    go.Scatter(
-        x=recent["연도"],
-        y=a_recent * recent["지난연수"] + b_recent,
-        mode="lines",
-        name="최근 20년 회귀직선",
-        line=dict(width=3, dash="dash")
-    )
-)
-prediction = a_all * years_from_1908 + b_all
-st.subheader("📐 회귀식")
-
-st.write(
-    f"전체 기간 : 평균기온 = {a_all:.5f} × (연도 - 1908) + {b_all:.5f}"
-)
-
-st.write(
-    f"최근 20년 : 평균기온 = {a_recent:.5f} × (연도 - 1908) + {b_recent:.5f}"
-)
+st.caption("모든 영화(kobis_movies.csv)를 사용하며 movieCd 오름차순으로 정렬 후 매 10편마다 앞의 3편을 테스트용으로 분리하여 평가했습니다.")
