@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 
@@ -25,11 +26,13 @@ st.markdown(
         color: #2457A6;
         margin-bottom: 0.25rem;
     }
+
     .sub-title {
         color: #64748b;
         font-size: 1rem;
         margin-bottom: 1.5rem;
     }
+
     .metric-card {
         background-color: #f1f6ff;
         border: 1px solid #d9e6fa;
@@ -37,23 +40,27 @@ st.markdown(
         padding: 20px 16px;
         min-height: 125px;
     }
+
     .metric-label {
         color: #526782;
         font-size: 0.92rem;
         margin-bottom: 10px;
     }
+
     .metric-value {
         color: #2457A6;
         font-size: 2rem;
         font-weight: 800;
         line-height: 1.2;
     }
+
     .section-title {
         font-size: 1.35rem;
         font-weight: 750;
         margin-top: 1.8rem;
         margin-bottom: 0.6rem;
     }
+
     .source-box {
         background-color: #f8fafc;
         border: 1px solid #dce3ec;
@@ -69,6 +76,7 @@ st.markdown(
     '<div class="main-title">🧠 뇌졸중 예측 실습실</div>',
     unsafe_allow_html=True
 )
+
 st.markdown(
     '<div class="sub-title">'
     '데이터를 탐색하고, 변수의 의미와 데이터의 특징을 발견하는 첫 번째 실습'
@@ -79,14 +87,17 @@ st.markdown(
 st.divider()
 
 st.markdown("### 🔎 데이터 소개")
+
 st.write(
     """
-    이 데이터는 여러 사람의 인구학적 특성, 건강 관련 정보와 뇌졸중 발생 여부를
-    담고 있는 CSV 데이터이다.
+    이 데이터는 여러 사람의 인구학적 특성, 건강 관련 정보와
+    뇌졸중 발생 여부를 담고 있는 CSV 데이터이다.
 
-    각 행은 한 사람의 정보를 나타내며, `stroke` 열은 뇌졸중 발생 여부를 나타낸다.
-    이번 화면에서는 데이터를 학습하거나 예측하기 전에 데이터의 규모, 열의 종류,
-    빈 값과 실제 기록을 먼저 확인한다.
+    각 행은 한 사람의 정보를 나타내며, `stroke` 열은
+    뇌졸중 발생 여부를 나타낸다.
+
+    이번 화면에서는 예측 모델을 학습하기 전에 데이터의 규모,
+    열의 종류, 빈 값과 실제 기록을 먼저 확인한다.
     """
 )
 
@@ -109,7 +120,8 @@ try:
     ]
 
     missing_columns = [
-        col for col in required_columns if col not in df.columns
+        col for col in required_columns
+        if col not in df.columns
     ]
 
     if missing_columns:
@@ -162,12 +174,30 @@ try:
         unsafe_allow_html=True
     )
 
+    # 열 이름별 우리말 뜻
+    korean_meanings = {
+        "id": "번호",
+        "gender": "성별",
+        "age": "나이",
+        "hypertension": "고혈압",
+        "heart_disease": "심장병",
+        "ever_married": "결혼 경험",
+        "work_type": "직업 형태",
+        "Residence_type": "거주 지역",
+        "avg_glucose_level": "평균 혈당",
+        "bmi": "체질량지수",
+        "smoking_status": "흡연 상태",
+        "stroke": "뇌졸중"
+    }
+
     def get_value_type(series, column_name):
         if column_name == "id":
             return "식별자"
-        elif column_name == "stroke":
-            return "이진값 (0, 1)"
-        elif column_name in ["hypertension", "heart_disease"]:
+        elif column_name in [
+            "stroke",
+            "hypertension",
+            "heart_disease"
+        ]:
             return "이진값 (0, 1)"
         elif pd.api.types.is_numeric_dtype(series):
             return "수치형"
@@ -176,7 +206,10 @@ try:
 
     column_info = pd.DataFrame({
         "열 이름": df.columns,
-        "우리말 뜻": ["" for _ in df.columns],
+        "우리말 뜻": [
+            korean_meanings.get(col, "")
+            for col in df.columns
+        ],
         "값의 종류": [
             get_value_type(df[col], col)
             for col in df.columns
@@ -186,10 +219,6 @@ try:
             for col in df.columns
         ]
     })
-
-    st.write(
-        "우리말 뜻은 교재를 참고하여 직접 채워 넣을 수 있도록 비워 두었다."
-    )
 
     st.dataframe(
         column_info,
@@ -202,8 +231,7 @@ try:
                 help="CSV 파일에 실제로 기록된 열 이름"
             ),
             "우리말 뜻": st.column_config.TextColumn(
-                "우리말 뜻",
-                help="교재를 참고하여 뜻을 직접 정리하는 칸"
+                "우리말 뜻"
             ),
             "값의 종류": st.column_config.TextColumn(
                 "값의 종류"
@@ -216,8 +244,8 @@ try:
     )
 
     st.caption(
-        "표의 우리말 뜻 칸은 화면에서 직접 편집할 수 있는 입력 칸이 아니라 "
-        "빈칸으로 표시한 열이다. 작성한 내용을 보관하려면 별도로 기록해야 한다."
+        "값의 종류는 데이터의 자료형과 열의 특성을 기준으로 표시한다. "
+        "bmi 등의 빈 값은 삭제하지 않고 개수만 확인한다."
     )
 
     st.markdown(
@@ -225,7 +253,9 @@ try:
         unsafe_allow_html=True
     )
 
-    st.write("데이터의 처음 다섯 행을 원본 열 이름과 값 그대로 표시한다.")
+    st.write(
+        "데이터의 처음 다섯 행을 원본 열 이름과 값 그대로 표시한다."
+    )
 
     st.dataframe(
         df.head(5),
@@ -238,7 +268,10 @@ try:
         unsafe_allow_html=True
     )
 
-    st.markdown('<div class="source-box">', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="source-box">',
+        unsafe_allow_html=True
+    )
 
     source_text = st.text_area(
         "교재의 데이터 출처 내용을 여기에 작성하세요.",
@@ -249,47 +282,21 @@ try:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.caption(
-        "원본 데이터 URL: "
-        + DATA_URL
-    )
+    st.caption("원본 데이터 URL")
+
+    st.code(DATA_URL, language=None)
 
     st.divider()
 
     st.caption(
-        "학습용 데이터 탐색 화면이다. 이 데이터로 만든 예측 결과는 "
-        "개인의 실제 뇌졸중 발생 여부를 진단하거나 확정하는 데 사용할 수 없다."
+        "이 앱은 학습용 데이터 탐색 실습이다. "
+        "예측 결과는 의료적 진단을 대신할 수 없다."
     )
 
 except Exception as error:
     st.error(
         "데이터를 불러오는 중 오류가 발생했다. "
-
-            column_info = pd.DataFrame({
-        "열 이름": df.columns,
-        "우리말 뜻": [
-            "번호",
-            "성별",
-            "나이",
-            "고혈압",
-            "심장병",
-            "결혼 경험",
-            "직업 형태",
-            "거주 지역",
-            "평균 혈당",
-            "체질량지수",
-            "흡연 상태",
-            "뇌졸중"
-        ],
-        "값의 종류": [
-            get_value_type(df[col], col)
-            for col in df.columns
-        ],
-        "빈 값 개수": [
-            int(df[col].isna().sum())
-            for col in df.columns
-        ]
-    })
         "인터넷 연결과 데이터 URL을 확인해 주세요."
     )
+
     st.caption(f"오류 내용: {error}")
