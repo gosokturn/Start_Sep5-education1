@@ -22,10 +22,9 @@ st.title("🧠 뇌졸중 예측 실습실")
 
 st.markdown(
     """
-    이 실습실에서는 뇌졸중 관련 데이터를 살펴보고,
-    데이터의 특징과 뇌졸중 발생 여부 사이의 관계를 탐색한다.
+    뇌졸중 관련 데이터를 탐색하고 분류 모델을 실습하는 공간이다.
 
-    왼쪽 사이드바에서 **탐색**을 선택하면 그래프와 분석 결과를 확인할 수 있다.
+    왼쪽 사이드바에서 **탐색** 또는 **분류 모델**을 선택할 수 있다.
     """
 )
 
@@ -41,8 +40,8 @@ col1, col2, col3, col4 = st.columns(4)
 
 col1.metric("전체 데이터 수", f"{total_rows:,}개")
 col2.metric("전체 변수 수", f"{total_columns}개")
-col3.metric("뇌졸중 발생 데이터", f"{stroke_count:,}개")
-col4.metric("뇌졸중 발생 비율", f"{stroke_rate:.2f}%")
+col3.metric("뇌졸중 데이터", f"{stroke_count:,}개")
+col4.metric("뇌졸중 비율", f"{stroke_rate:.2f}%")
 
 st.divider()
 st.subheader("📋 변수 설명")
@@ -97,7 +96,6 @@ st.dataframe(
 
 st.divider()
 st.subheader("🔎 데이터 미리 보기")
-st.caption("원본 데이터의 처음 5개 행이다.")
 
 st.dataframe(
     df.head(5),
@@ -105,13 +103,10 @@ st.dataframe(
     hide_index=True
 )
 
-st.divider()
-
 with st.expander("📖 데이터 출처"):
-    st.write("출처: GitHub 공개 CSV 데이터")
     st.code(DATA_URL, language=None)
 
 st.caption(
-    "주의: 이 데이터는 학습 및 탐색 실습용이다. "
-    "분석 결과만으로 개인의 뇌졸중 발생 여부를 확정할 수 없다."
+    "이 데이터는 학습 및 탐색 실습용이며, "
+    "모델의 예측만으로 개인의 뇌졸중 여부를 확정할 수 없다."
 )
