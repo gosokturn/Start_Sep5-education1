@@ -8,7 +8,7 @@ st.set_page_config(
     page_title="뇌졸중 예측 실습실",
     page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 
@@ -67,11 +67,19 @@ st.markdown(
         border-radius: 12px;
         padding: 16px;
     }
+
+    .nav-card {
+        background-color: #f1f6ff;
+        border: 1px solid #d9e6fa;
+        border-radius: 14px;
+        padding: 18px;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
+# 상단 제목
 st.markdown(
     '<div class="main-title">🧠 뇌졸중 예측 실습실</div>',
     unsafe_allow_html=True
@@ -79,14 +87,42 @@ st.markdown(
 
 st.markdown(
     '<div class="sub-title">'
-    '데이터를 탐색하고, 변수의 의미와 데이터의 특징을 발견하는 첫 번째 실습'
+    '데이터를 이해하고, 그래프를 통해 특징을 발견하는 학습 공간'
     '</div>',
     unsafe_allow_html=True
 )
 
+# 페이지 이동 안내
+st.markdown(
+    """
+    <div class="nav-card">
+        <h3>🔎 다음 단계: 데이터 탐색</h3>
+        <p>
+        나이와 평균 혈당의 분포, 뇌졸중 경험에 따른 차이,
+        고혈압·심장병과 뇌졸중 비율 등을 그래프로 살펴볼 수 있다.
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.write("")
+
+if st.button(
+    "🔎 탐색 페이지로 이동",
+    use_container_width=True,
+    type="primary"
+):
+    st.switch_page("pages/1_탐색.py")
+
+st.caption(
+    "사이드바에서 '탐색' 페이지를 선택해도 이동할 수 있다."
+)
+
 st.divider()
 
-st.markdown("### 🔎 데이터 소개")
+# 데이터 소개
+st.markdown("### 📚 데이터 소개")
 
 st.write(
     """
@@ -96,8 +132,11 @@ st.write(
     각 행은 한 사람의 정보를 나타내며, `stroke` 열은
     뇌졸중 발생 여부를 나타낸다.
 
-    이번 화면에서는 예측 모델을 학습하기 전에 데이터의 규모,
-    열의 종류, 빈 값과 실제 기록을 먼저 확인한다.
+    - `stroke = 1`: 뇌졸중을 겪은 사람
+    - `stroke = 0`: 뇌졸중을 겪지 않은 사람
+
+    먼저 데이터의 규모와 구조를 확인한 다음,
+    탐색 페이지에서 그래프와 표를 이용해 데이터의 특징을 분석한다.
     """
 )
 
@@ -131,6 +170,7 @@ try:
         )
         st.stop()
 
+    # 핵심 정보
     total_people = len(df)
     total_columns = len(df.columns)
     stroke_count = int((df["stroke"] == 1).sum())
@@ -165,16 +205,15 @@ try:
             )
 
     st.caption(
-        "비율은 전체 데이터 중 stroke 값이 1인 행의 비율이다. "
-        "소수점 둘째 자리까지 표시한다."
+        "뇌졸중 비율은 전체 데이터 중 stroke 값이 1인 행의 비율이다."
     )
 
+    # 열 이름과 우리말 뜻
     st.markdown(
         '<div class="section-title">📋 열 이름과 데이터 구조</div>',
         unsafe_allow_html=True
     )
 
-    # 열 이름별 우리말 뜻
     korean_meanings = {
         "id": "번호",
         "gender": "성별",
@@ -224,38 +263,20 @@ try:
         column_info,
         use_container_width=True,
         hide_index=True,
-        height=460,
-        column_config={
-            "열 이름": st.column_config.TextColumn(
-                "열 이름",
-                help="CSV 파일에 실제로 기록된 열 이름"
-            ),
-            "우리말 뜻": st.column_config.TextColumn(
-                "우리말 뜻"
-            ),
-            "값의 종류": st.column_config.TextColumn(
-                "값의 종류"
-            ),
-            "빈 값 개수": st.column_config.NumberColumn(
-                "빈 값 개수",
-                format="%d"
-            )
-        }
+        height=460
     )
 
     st.caption(
-        "값의 종류는 데이터의 자료형과 열의 특성을 기준으로 표시한다. "
-        "bmi 등의 빈 값은 삭제하지 않고 개수만 확인한다."
+        "빈 값 개수는 각 열에서 결측값으로 기록된 셀의 수이다."
     )
 
+    # 원본 데이터 미리보기
     st.markdown(
         '<div class="section-title">🗂️ 원본 데이터 미리보기</div>',
         unsafe_allow_html=True
     )
 
-    st.write(
-        "데이터의 처음 다섯 행을 원본 열 이름과 값 그대로 표시한다."
-    )
+    st.write("데이터의 처음 다섯 행을 표시한다.")
 
     st.dataframe(
         df.head(5),
@@ -263,24 +284,18 @@ try:
         hide_index=True
     )
 
+    # 데이터 출처
     st.markdown(
         '<div class="section-title">📚 데이터 출처</div>',
         unsafe_allow_html=True
     )
 
-    st.markdown(
-        '<div class="source-box">',
-        unsafe_allow_html=True
-    )
-
-    source_text = st.text_area(
-        "교재의 데이터 출처 내용을 여기에 작성하세요.",
+    st.text_area(
+        "교재의 데이터 출처 내용을 입력하세요.",
         placeholder="교재에 적힌 데이터 출처를 입력하세요.",
         height=100,
         key="source_text"
     )
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
     st.caption("원본 데이터 URL")
 
@@ -288,9 +303,26 @@ try:
 
     st.divider()
 
+    st.markdown("### 🚀 탐색 페이지에서 할 수 있는 활동")
+
+    st.markdown(
+        """
+        - 나이와 평균 혈당의 분포 확인
+        - 뇌졸중 경험 유무에 따른 나이와 평균 혈당 비교
+        - 고혈압 및 심장병 유무에 따른 뇌졸중 비율 비교
+        - BMI 결측자와 전체 데이터의 뇌졸중 비율 비교
+        - 흡연 상태별 사람 수 확인
+        """
+    )
+
+    if st.button(
+        "탐색 시작하기 →",
+        use_container_width=True
+    ):
+        st.switch_page("pages/1_탐색.py")
+
     st.caption(
-        "이 앱은 학습용 데이터 탐색 실습이다. "
-        "예측 결과는 의료적 진단을 대신할 수 없다."
+        "이 앱은 데이터 분석 학습용이다. 분석 결과는 의료적 진단을 대신하지 않는다."
     )
 
 except Exception as error:
@@ -298,5 +330,4 @@ except Exception as error:
         "데이터를 불러오는 중 오류가 발생했다. "
         "인터넷 연결과 데이터 URL을 확인해 주세요."
     )
-
     st.caption(f"오류 내용: {error}")
