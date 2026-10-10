@@ -21,11 +21,18 @@ explore_page = st.Page(
     icon="🔎"
 )
 
+classification_page = st.Page(
+    "pages/2_분류_모델.py",
+    title="분류 모델",
+    icon="🤖"
+)
+
 navigation = st.navigation(
     {
         "뇌졸중 예측 실습실": [
             home_page,
-            explore_page
+            explore_page,
+            classification_page
         ]
     },
     position="sidebar",
