@@ -21,14 +21,6 @@ DEFAULT_URL = (
     "2026-datascience/refs/heads/main/sangok_meals.csv"
 )
 
-with st.sidebar:
-    st.header("데이터 설정")
-    data_url = st.text_input(
-        "CSV 데이터 주소",
-        value=DEFAULT_URL,
-        help="UTF-8 인코딩이며 날짜, 식사, 메뉴 열이 있어야 합니다."
-    )
-    st.caption("주소를 변경하면 해당 CSV를 분석합니다.")
 
 @st.cache_data
 def load_data(url):
@@ -54,7 +46,6 @@ def load_data(url):
 def clean_menu(name):
     name = str(name).strip()
 
-    # 괄호 및 괄호 안의 내용 제거
     previous = None
     while previous != name:
         previous = name
@@ -86,7 +77,7 @@ def find_rules(baskets):
     total_days = len(baskets)
 
     if total_days == 0:
-        return pd.DataFrame(), 0, 0
+        return pd.DataFrame(), {}, 0
 
     menu_counts = {}
     pair_counts = {}
@@ -105,9 +96,12 @@ def find_rules(baskets):
         confidence_ab = together / menu_counts[a]
         confidence_ba = together / menu_counts[b]
 
-        expected_ab = (menu_counts[a] / total_days) * (
+        expected_ab = (
+            menu_counts[a] / total_days
+        ) * (
             menu_counts[b] / total_days
         )
+
         lift = support / expected_ab if expected_ab else 0
 
         rules.append({
@@ -133,7 +127,29 @@ def find_rules(baskets):
         columns=["조건", "결과", "동시", "지지도", "신뢰도", "향상도"]
     )
 
-    return rules_df, len(menu_counts), len(pair_counts)
+    return rules_df, menu_counts, len(pair_counts)
+
+
+with st.sidebar:
+    st.header("데이터 설정")
+
+    data_url = st.text_input(
+        "CSV 데이터 주소",
+        value=DEFAULT_URL,
+        help="UTF-8 인코딩이며 날짜, 식사, 메뉴 열이 있어야 합니다."
+    )
+
+    st.divider()
+    st.header("규칙 필터")
+
+    min_days = st.slider(
+        "최소 동시 일수",
+        min_value=1,
+        max_value=10,
+        value=1,
+        step=1,
+        help="선택한 횟수 이상 함께 나온 메뉴 규칙만 표시합니다."
+    )
 
 
 try:
@@ -158,7 +174,7 @@ try:
         selected_df = lunch
 
     baskets = prepare_baskets(selected_df)
-    rules_df, menu_count, pair_count = find_rules(baskets)
+    rules_df, menu_counts, pair_count = find_rules(baskets)
 
 except Exception as e:
     st.error(f"데이터를 불러오거나 분석하지 못했습니다: {e}")
@@ -166,33 +182,35 @@ except Exception as e:
     st.stop()
 
 
+total_days = len(baskets)
+menu_count = len(menu_counts)
+all_menus = sorted(menu_counts.keys())
+
+if total_days == 0:
+    st.warning("분석할 급식 데이터가 없습니다.")
+    st.stop()
+
+
 # 요약 정보
 c1, c2, c3 = st.columns(3)
-c1.metric("급식 일수", f"{len(baskets):,}일")
+c1.metric("급식 일수", f"{total_days:,}일")
 c2.metric("메뉴 종류 수", f"{menu_count:,}종")
 c3.metric("함께 나온 메뉴 쌍", f"{pair_count:,}쌍")
 
 st.divider()
 
-if rules_df.empty:
-    st.warning("서로 다른 메뉴가 함께 나온 기록이 없습니다.")
-    st.stop()
 
-
-# 필터 및 정렬
+# 연관 규칙 탐색
 st.subheader("🔎 연관 규칙 탐색")
-
-all_menus = sorted(
-    set(rules_df["조건"]).union(set(rules_df["결과"]))
-)
 
 col1, col2 = st.columns([2, 1])
 
 with col1:
     selected_menu = st.selectbox(
-        "메뉴 선택",
+        "규칙을 좁혀 볼 메뉴",
         options=["전체 메뉴"] + all_menus,
-        index=0
+        index=0,
+        key="rule_menu_filter"
     )
 
 with col2:
@@ -202,13 +220,19 @@ with col2:
         index=0
     )
 
-filtered = rules_df.copy()
 
+# 최소 동시 일수 필터를 먼저 적용
+filtered = rules_df[
+    rules_df["동시"] >= min_days
+].copy()
+
+# 선택한 메뉴가 조건 또는 결과인 규칙만 표시
 if selected_menu != "전체 메뉴":
     filtered = filtered[
         (filtered["조건"] == selected_menu)
         | (filtered["결과"] == selected_menu)
     ].copy()
+
 
 sort_columns = {
     "향상도 순": ["향상도", "신뢰도", "동시"],
@@ -221,29 +245,38 @@ filtered = filtered.sort_values(
     ascending=[False, False, False]
 ).reset_index(drop=True)
 
-display_df = filtered.copy()
-display_df["지지도"] = display_df["지지도"].map(
-    lambda x: f"{x:.2%}"
-)
-display_df["신뢰도"] = display_df["신뢰도"].map(
-    lambda x: f"{x:.2%}"
-)
-display_df["향상도"] = display_df["향상도"].map(
-    lambda x: f"{x:.3f}"
+
+# 필터링 후 남은 규칙 수
+st.write(
+    f"**현재 조건에 남은 규칙: {len(filtered):,}개** "
+    f"(최소 동시 일수 {min_days}일 이상)"
 )
 
-st.caption(
-    f"표시 중인 규칙: {len(filtered):,}개 "
-    "(조건과 결과를 바꾼 규칙은 별도로 표시)"
-)
+if filtered.empty:
+    st.info(
+        "조건에 맞는 규칙이 없습니다. "
+        "최소 동시 일수를 낮추거나 다른 메뉴를 선택해 보세요."
+    )
+else:
+    display_df = filtered.copy()
+    display_df["지지도"] = display_df["지지도"].map(
+        lambda x: f"{x:.2%}"
+    )
+    display_df["신뢰도"] = display_df["신뢰도"].map(
+        lambda x: f"{x:.2%}"
+    )
+    display_df["향상도"] = display_df["향상도"].map(
+        lambda x: f"{x:.3f}"
+    )
 
-st.dataframe(
-    display_df,
-    use_container_width=True,
-    hide_index=True
-)
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True
+    )
 
-# 상위 10개 향상도 가로 막대그래프
+
+# 향상도 상위 10개 그래프
 st.subheader("📊 향상도 상위 10개 규칙")
 
 chart_df = filtered.sort_values(
@@ -252,13 +285,16 @@ chart_df = filtered.sort_values(
 ).head(10).copy()
 
 if chart_df.empty:
-    st.info("선택한 메뉴에 해당하는 규칙이 없습니다.")
+    st.info("그래프로 표시할 규칙이 없습니다.")
 else:
     chart_df["규칙"] = (
         chart_df["조건"] + " → " + chart_df["결과"]
     )
 
-    chart_df = chart_df.sort_values("향상도", ascending=True)
+    chart_df = chart_df.sort_values(
+        "향상도",
+        ascending=True
+    )
 
     fig = px.bar(
         chart_df,
@@ -283,6 +319,79 @@ else:
 
     st.plotly_chart(fig, use_container_width=True)
 
+
+st.divider()
+
+
+# 함께 나온 적 없는 짝
+st.subheader("🚫 함께 나온 적 없는 짝")
+st.caption(
+    "선택한 메뉴와 같은 날 한 번도 함께 나오지 않았지만, "
+    "단독으로는 10일 이상 등장한 메뉴를 찾습니다."
+)
+
+if not all_menus:
+    st.info("선택할 메뉴가 없습니다.")
+else:
+    absent_menu = st.selectbox(
+        "함께 나온 적 없는 짝을 찾을 기준 메뉴",
+        options=all_menus,
+        index=0,
+        key="absent_pair_menu"
+    )
+
+    selected_days = menu_counts[absent_menu]
+
+    # 선택 메뉴가 등장한 날의 다른 메뉴와 함께 나온 횟수 계산
+    cooccurring_menus = set()
+
+    for basket in baskets:
+        if absent_menu in basket:
+            cooccurring_menus.update(basket)
+
+    cooccurring_menus.discard(absent_menu)
+
+    # 10일 이상 등장했지만 선택 메뉴와 동시 등장한 적이 없는 메뉴
+    absent_candidates = [
+        (menu, count)
+        for menu, count in menu_counts.items()
+        if menu != absent_menu
+        and count >= 10
+        and menu not in cooccurring_menus
+    ]
+
+    absent_candidates.sort(
+        key=lambda item: (-item[1], item[0])
+    )
+
+    st.write(
+        f"**선택한 메뉴 「{absent_menu}」는 "
+        f"{selected_days:,}일 등장했습니다.**"
+    )
+
+    st.write(
+        f"함께 나온 적 없는 메뉴: "
+        f"**{len(absent_candidates):,}종**"
+    )
+
+    if absent_candidates:
+        absent_df = pd.DataFrame(
+            absent_candidates,
+            columns=["메뉴", "등장 일수"]
+        )
+
+        st.dataframe(
+            absent_df,
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info(
+            "이 메뉴와 한 번도 함께 나오지 않았으면서 "
+            "10일 이상 등장한 메뉴가 없습니다."
+        )
+
+
 with st.expander("📘 지표 읽는 법"):
     st.markdown(
         """
@@ -291,11 +400,17 @@ with st.expander("📘 지표 읽는 법"):
         - **향상도 1 초과**: 두 메뉴가 독립적일 때보다 자주 함께 등장
         - **향상도 1**: 독립적인 등장 빈도와 같음
         - **향상도 1 미만**: 독립적일 때보다 덜 자주 함께 등장
+        - **최소 동시 일수**: 선택한 횟수 미만으로 함께 나온 규칙은 제외
 
-        향상도가 높더라도 한 해의 급식 데이터에서 발견된
-        연관성일 뿐, 두 메뉴 사이의 인과관계를 뜻하지는 않습니다.
+        향상도가 높더라도 인과관계를 뜻하지는 않습니다.
+        '함께 나온 적 없는 짝'도 분석한 데이터 기간 안에서의 결과입니다.
         """
     )
 
+
 with st.expander("원본 데이터 확인"):
-    st.dataframe(selected_df, use_container_width=True, hide_index=True)
+    st.dataframe(
+        selected_df,
+        use_container_width=True,
+        hide_index=True
+    )
