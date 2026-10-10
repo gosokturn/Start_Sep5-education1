@@ -264,6 +264,32 @@ try:
 except Exception as error:
     st.error(
         "데이터를 불러오는 중 오류가 발생했다. "
+
+            column_info = pd.DataFrame({
+        "열 이름": df.columns,
+        "우리말 뜻": [
+            "번호",
+            "성별",
+            "나이",
+            "고혈압",
+            "심장병",
+            "결혼 경험",
+            "직업 형태",
+            "거주 지역",
+            "평균 혈당",
+            "체질량지수",
+            "흡연 상태",
+            "뇌졸중"
+        ],
+        "값의 종류": [
+            get_value_type(df[col], col)
+            for col in df.columns
+        ],
+        "빈 값 개수": [
+            int(df[col].isna().sum())
+            for col in df.columns
+        ]
+    })
         "인터넷 연결과 데이터 URL을 확인해 주세요."
     )
     st.caption(f"오류 내용: {error}")
