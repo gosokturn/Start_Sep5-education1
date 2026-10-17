@@ -34,6 +34,11 @@ pages = [
         "path": "pages/4_전처리.py",
         "title": "전처리",
         "icon": "🧹"
+    },
+    {
+        "path": "pages/5_내가_만든_모델_소개.py",
+        "title": "내가 만든 모델 소개",
+        "icon": "📝"
     }
 ]
 
