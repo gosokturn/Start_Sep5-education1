@@ -63,11 +63,6 @@ explore_page = st.Page(
     icon="🔎"
 )
 
-classification_page = st.Page(
-    "pages/2_분류_모델.py",
-    title="분류 모델",
-    icon="🤖"
-)
 
 score_page = st.Page(
     "pages/3_채점표.py",
